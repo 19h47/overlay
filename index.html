@@ -1,0 +1,1913 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Overlay</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <style>
+      :root {
+        /* Color tokens (Tailwind-inspired) */
+        --color-neutral-900: #1a1a1a;
+        --color-neutral-100: #f5f5f5;
+        --color-white: #ffffff;
+        --color-black-25: rgba(0, 0, 0, 0.25);
+        --color-black-15: rgba(0, 0, 0, 0.15);
+        --color-red-500-50: rgba(255, 0, 0, 0.5);
+        --color-red-500-40: rgba(255, 0, 0, 0.4);
+        --color-neutral-800: #1f1f1f;
+        --color-neutral-700: #333333;
+        --color-neutral-300: #cfcfcf;
+        --color-neutral-50: #f0f0f0;
+        --color-neutral-950: #111111;
+
+        /* Colors (dark theme by default) */
+        --app-bg: var(--color-neutral-900);
+        --overlay-bg: var(--color-white);
+        /* Default: semi-transparent black grid, semi-transparent red guides */
+        --grid-color: var(--color-black-25);
+        --guides-color: var(--color-red-500-50);
+        /* Panel / toast colors */
+        --panel-bg: var(--color-neutral-800);
+        --panel-border: var(--color-neutral-700);
+        --panel-text: var(--color-neutral-50);
+        /* Line widths */
+        --grid-line-width: 0.0625rem; /* 1px */
+        --guide-line-width: 0.125rem; /* 2px */
+        /* Animation duration */
+        --overlay-transition-duration: 0.2s;
+        /* Base font */
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      [data-theme="light"] {
+        --app-bg: var(--color-neutral-100);
+        --overlay-bg: var(--color-white);
+        --grid-color: var(--color-black-15);
+        --guides-color: var(--color-red-500-40);
+        --panel-bg: var(--color-white);
+        --panel-border: var(--color-neutral-300);
+        --panel-text: var(--color-neutral-950);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--app-bg);
+        overflow: hidden;
+      }
+
+      /* Viewport: fullscreen, draggable centered image */
+      .pan-viewport {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        cursor: grab;
+        user-select: none;
+      }
+
+      .pan-viewport.dragging {
+        cursor: grabbing;
+      }
+
+      .pan-inner {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        cursor: grab;
+      }
+
+      .pan-viewport.dragging .pan-inner {
+        cursor: grabbing;
+      }
+
+      .pan-viewport:focus {
+        outline: none;
+      }
+
+      .pan-viewport:focus-visible {
+        outline: 2px solid var(--panel-text);
+        outline-offset: -2px;
+      }
+
+      .paper-frame {
+        position: relative;
+        display: inline-block;
+      }
+
+      .paper-frame img {
+        display: block;
+      }
+
+      .paper-frame.landscape img,
+      .paper-frame.portrait img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      /* 1 cm × 1 cm grid overlay (color via CSS variable) */
+      .paper-frame .grid-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        background-image:
+          linear-gradient(
+            to right,
+            var(--grid-color) var(--grid-line-width),
+            transparent var(--grid-line-width)
+          ),
+          linear-gradient(
+            to bottom,
+            var(--grid-color) var(--grid-line-width),
+            transparent var(--grid-line-width)
+          );
+        /* Centered; grid may extend beyond edges */
+        background-position:
+          center 0,
+          0 center;
+      }
+
+      /* Center lines (color via CSS variable) */
+      .paper-frame .center-v,
+      .paper-frame .center-h {
+        position: absolute;
+        pointer-events: none;
+        background: var(--guides-color);
+      }
+
+      .paper-frame .center-v {
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: var(--guide-line-width);
+        transform: translateX(-50%);
+      }
+
+      .paper-frame .center-h {
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: var(--guide-line-width);
+        transform: translateY(-50%);
+      }
+
+      .white-overlay {
+        position: fixed;
+        inset: 0;
+        background: var(--overlay-bg);
+        z-index: 5;
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        transition:
+          opacity var(--overlay-transition-duration) ease,
+          visibility var(--overlay-transition-duration) ease;
+      }
+
+      .white-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      /* Small toast to show when state has been saved */
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 1rem; /* 16px */
+        transform: translate(-50%, 0.5rem); /* 8px */
+        padding: 0.25rem 0.75rem; /* 4px 12px */
+        font-size: 0.75rem; /* 12px */
+        line-height: 1.4;
+        pointer-events: none;
+        opacity: 0;
+        transition:
+          opacity 0.15s ease,
+          transform 0.15s ease;
+        z-index: 10;
+      }
+
+      .toast.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      .shortcuts-hotzone {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        width: 2rem; /* 32px */
+        height: 2rem; /* 32px */
+        z-index: 8;
+      }
+
+      .shortcuts-panel {
+        position: fixed;
+        right: 1rem;
+        bottom: 1rem;
+        padding: 0.5rem 0.75rem;
+        line-height: 1.5;
+        z-index: 9;
+        max-width: 13.75rem;
+        opacity: 0;
+        transform: translateY(0.375rem);
+        pointer-events: none;
+        transition:
+          opacity 0.15s ease,
+          transform 0.15s ease;
+      }
+
+      .shortcuts-hotzone:hover + .shortcuts-panel,
+      .shortcuts-panel:hover {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+        box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.35);
+      }
+
+      .shortcuts-panel__title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        font-size: 0.75rem;
+      }
+
+      .shortcuts-panel__list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .shortcuts-panel__item code {
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "SF Mono",
+          Menlo,
+          Monaco,
+          Consolas,
+          "Liberation Mono",
+          "Courier New",
+          monospace;
+        font-size: 0.625rem; /* 10px */
+        padding: 0.0625rem 0.25rem; /* 1px 4px */
+        border-radius: 0.25rem; /* 4px */
+        background: rgba(255, 255, 255, 0.12);
+        margin-right: 0.25rem; /* 4px */
+      }
+
+      /* Utility-like helpers */
+      .u-panel {
+        border-radius: 0.25rem;
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        color: var(--panel-text);
+      }
+
+      .u-text-xs {
+        font-size: 0.75rem;
+      }
+
+      .u-flex {
+        display: flex;
+      }
+
+      .u-items-center {
+        align-items: center;
+      }
+
+      .u-justify-between {
+        justify-content: space-between;
+      }
+
+      /* Main controls panel */
+      .controls-panel {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        max-width: 18rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        z-index: 9;
+        transition:
+          opacity 0.15s ease,
+          transform 0.15s ease;
+      }
+
+      .controls-panel__section {
+        margin-bottom: 0.5rem;
+      }
+
+      .controls-panel__section:last-child {
+        margin-bottom: 0;
+      }
+
+      .controls-panel__title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+
+      .controls-panel__field {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+      }
+
+      .controls-panel__field:last-child {
+        margin-bottom: 0;
+      }
+
+      .controls-panel__field label {
+        flex: 1 1 auto;
+      }
+
+      .controls-panel__field input[type="range"] {
+        flex: 1 1 0;
+      }
+
+      .controls-panel__field input[type="number"] {
+        width: 4.5rem;
+      }
+
+      .controls-panel__field select {
+        max-width: 8rem;
+      }
+
+      .controls-panel__buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
+      }
+
+      .controls-panel__buttons button {
+        border: 1px solid var(--panel-border);
+        background: transparent;
+        color: inherit;
+        border-radius: 0.25rem;
+        padding: 0.15rem 0.4rem;
+        font-size: 0.7rem;
+        cursor: pointer;
+      }
+
+      .controls-panel__buttons button:hover {
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      /* Controls visibility toggle */
+      .controls-toggle {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 10;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg);
+        color: var(--panel-text);
+        font-size: 0.75rem;
+        cursor: pointer;
+      }
+
+      .controls-toggle:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .controls-toggle:focus-visible,
+      .controls-panel__buttons button:focus-visible,
+      .controls-panel__field input:focus-visible,
+      .controls-panel__field select:focus-visible {
+        outline: 2px solid currentColor;
+        outline-offset: 2px;
+      }
+
+      overlay-panel:not([open]) .controls-panel {
+        transform: translateX(110%);
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <overlay-viewport
+      class="pan-viewport js-pan-viewport"
+      id="panViewport"
+      tabindex="0"
+      role="application"
+      aria-label="Image pan area. Drag to position, or use arrow keys to move."
+    >
+      <div class="pan-inner js-pan-inner" id="panInner">
+        <div class="paper-frame js-paper-frame">
+          <img src="" alt="Overlay" id="overlayImg" class="js-paper-image" />
+          <div class="grid-overlay js-grid-overlay" aria-hidden="true"></div>
+          <div class="center-v js-center-v" aria-hidden="true"></div>
+          <div class="center-h js-center-h" aria-hidden="true"></div>
+        </div>
+      </div>
+    </overlay-viewport>
+
+    <div class="white-overlay" id="whiteOverlay" aria-hidden="true"></div>
+    <overlay-toast
+      class="toast js-toast u-panel u-text-xs"
+      aria-live="polite"
+    ></overlay-toast>
+    <overlay-controls>
+      <overlay-panel id="controlsPanel">
+        <div
+          class="controls-panel js-controls-panel u-panel u-text-xs"
+          aria-label="Overlay controls"
+        >
+          <div class="controls-panel__section">
+            <div class="controls-panel__title">Image</div>
+            <div class="controls-panel__field">
+              <label for="controlImage">Source</label>
+              <select id="controlImage" data-control="image"></select>
+            </div>
+          </div>
+
+          <div class="controls-panel__section">
+            <div class="controls-panel__title">Appearance</div>
+            <div class="controls-panel__field">
+              <label for="controlContrast">Contrast</label>
+              <input
+                id="controlContrast"
+                data-control="contrast"
+                type="range"
+                min="50"
+                max="500"
+                step="1"
+              />
+            </div>
+            <div class="controls-panel__field">
+              <label for="controlBrightness">Brightness</label>
+              <input
+                id="controlBrightness"
+                data-control="brightness"
+                type="range"
+                min="50"
+                max="150"
+                step="1"
+              />
+            </div>
+            <div class="controls-panel__field">
+              <label for="controlGrayscale">Grayscale</label>
+              <input
+                id="controlGrayscale"
+                data-control="grayscale"
+                type="checkbox"
+              />
+            </div>
+            <div class="controls-panel__field">
+              <label for="controlTheme">Theme</label>
+              <select id="controlTheme" data-control="theme">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="controls-panel__section">
+            <div class="controls-panel__title">Grid & guides</div>
+            <div class="controls-panel__field">
+              <label for="controlGrid">Grid</label>
+              <input id="controlGrid" data-control="grid" type="checkbox" />
+            </div>
+            <div class="controls-panel__field">
+              <label for="controlGuides">Center guides</label>
+              <input id="controlGuides" data-control="guides" type="checkbox" />
+            </div>
+            <div class="controls-panel__field">
+              <label for="controlGridColor">Grid color</label>
+              <input
+                id="controlGridColor"
+                data-control="gridColor"
+                type="color"
+              />
+            </div>
+            <div class="controls-panel__field">
+              <label for="controlGuidesColor">Guides color</label>
+              <input
+                id="controlGuidesColor"
+                data-control="guidesColor"
+                type="color"
+              />
+            </div>
+          </div>
+
+          <div class="controls-panel__section">
+            <div class="controls-panel__title">Paper & screen</div>
+            <div class="controls-panel__field">
+              <label for="controlPaper">Paper size</label>
+              <select id="controlPaper" data-control="paper">
+                <option value="A3">A3</option>
+                <option value="A4">A4</option>
+              </select>
+            </div>
+            <div class="controls-panel__field">
+              <label for="controlOrientation">Orientation</label>
+              <select id="controlOrientation" data-control="orientation">
+                <option value="auto">Auto</option>
+                <option value="landscape">Landscape</option>
+                <option value="portrait">Portrait</option>
+              </select>
+            </div>
+            <div class="controls-panel__field">
+              <label for="controlScreenMm">Screen width (mm)</label>
+              <input
+                id="controlScreenMm"
+                data-control="screenWidthMm"
+                type="number"
+                min="200"
+                max="800"
+                step="1"
+              />
+            </div>
+          </div>
+
+          <div class="controls-panel__section">
+            <div class="controls-panel__title">Actions</div>
+            <div class="controls-panel__buttons">
+              <button type="button" data-action="fullscreen">Fullscreen</button>
+              <button type="button" data-action="whiteScreen">
+                White screen
+              </button>
+              <button type="button" data-action="reset">Reset</button>
+            </div>
+          </div>
+        </div>
+      </overlay-panel>
+
+      <div class="shortcuts-hotzone" aria-hidden="true"></div>
+      <div class="shortcuts-panel u-panel u-text-xs" aria-hidden="true">
+        <div class="shortcuts-panel__title">Keyboard shortcuts</div>
+        <ul class="shortcuts-panel__list">
+          <li class="shortcuts-panel__item">
+            <code>←</code><code>→</code><code>↑</code><code>↓</code> Move image
+          </li>
+          <li class="shortcuts-panel__item">
+            <code>G</code> Grid / <code>C</code> Center guides
+          </li>
+          <li class="shortcuts-panel__item">
+            <code>W</code> White screen / <code>F</code> Fullscreen
+          </li>
+          <li class="shortcuts-panel__item"><code>R</code> Reset settings</li>
+        </ul>
+      </div>
+    </overlay-controls>
+    <overlay-panel-toggle
+      class="controls-toggle u-text-xs"
+      role="button"
+      tabindex="0"
+      aria-label="Toggle controls panel"
+      aria-controls="controlsPanel"
+      aria-expanded="false"
+    >
+      Controls
+    </overlay-panel-toggle>
+
+    <script type="application/json" id="overlay-config">
+      {
+        "imagesDir": "images/",
+        "images": [
+          { "name": "⊠ Andor S02E01", "file": "2026-02-21-andor-s02e01.png" },
+          { "name": "Andor S02E02", "file": "2026-02-22-andor-s02e02-01.png" },
+          { "name": "Andor S02E03", "file": "2026-02-22-andor-s02e02-02.png" },
+          { "name": "⊠ Wario Land", "file": "wario-land.jpg" },
+          { "name": "⊠ Picsou", "file": "picsou.jpg" },
+          { "name": "Chuck Norris", "file": "chuck-norris.jpg" },
+          { "name": "Duck Tales", "file": "duck-tales.jpg" },
+          {
+            "name": "Le monde de Kaël",
+            "file": "le-monde-de-kael-couleur.jpeg"
+          },
+          { "name": "Sonic Adventure", "file": "sonic-adventure.jpg" },
+          {
+            "name": "Le monde de Kaël",
+            "file": "le-monde-de-kael-noir-et-blanc.jpeg"
+          }
+        ],
+        "screen": {
+          "widthMm": 302,
+          "heightMm": 302
+        },
+        "paperSizes": {
+          "A3": {
+            "portrait": { "width": 297, "height": 420 },
+            "landscape": { "width": 420, "height": 297 }
+          },
+          "A4": {
+            "portrait": { "width": 210, "height": 297 },
+            "landscape": { "width": 297, "height": 210 }
+          }
+        },
+        "defaults": {
+          "paperSize": "A3",
+          "orientation": "auto",
+          "contrast": 140,
+          "brightness": 105,
+          "grayscale": false,
+          "gridVisible": true,
+          "guidesVisible": true,
+          "gridColor": "#000000",
+          "guidesColor": "#ff0000",
+          "theme": "dark",
+          "controlsHidden": true
+        }
+      }
+    </script>
+
+    <script>
+      // DOM helpers (Chrome DevTools-like)
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const $$ = (selector, root = document) =>
+        Array.from(root.querySelectorAll(selector));
+
+      class OverlayViewportElement extends HTMLElement {
+        #panInner = null;
+        #dx = 0;
+        #dy = 0;
+        #drag = {
+          startX: 0,
+          startY: 0,
+          startDx: 0,
+          startDy: 0,
+          active: false,
+        };
+        #panRafId = null;
+        #panNeedsUpdate = false;
+
+        #onMouseDown = event => {
+          if (event.button !== 0) {
+            return;
+          }
+
+          event.preventDefault();
+
+          const { x, y } = this.#getClientXY(event);
+
+          this.#startDrag(x, y);
+        };
+
+        #onMouseMove = e => {
+          if (!this.#drag.active) return;
+          e.preventDefault();
+          const { x, y } = this.#getClientXY(e);
+          this.#updateDrag(x, y);
+        };
+
+        #onMouseUp = e => {
+          if (e.button !== 0) {
+            return;
+          }
+          this.#endDrag();
+        };
+
+        #onMouseLeave = () => this.#endDrag();
+
+        #onTouchStart = e => {
+          const { x, y } = this.#getClientXY(e);
+          this.#startDrag(x, y);
+        };
+
+        #onTouchMove = e => {
+          if (!this.#drag.active) return;
+          e.preventDefault();
+          const { x, y } = this.#getClientXY(e);
+          this.#updateDrag(x, y);
+        };
+
+        #onTouchEnd = () => this.#endDrag();
+
+        connectedCallback() {
+          this.#panInner = this.querySelector(".js-pan-inner");
+
+          this.addEventListener("mousedown", this.#onMouseDown);
+          this.addEventListener("mousemove", this.#onMouseMove);
+          this.addEventListener("mouseup", this.#onMouseUp);
+          this.addEventListener("mouseleave", this.#onMouseLeave);
+
+          this.addEventListener("touchstart", this.#onTouchStart, {
+            passive: true,
+          });
+          this.addEventListener("touchmove", this.#onTouchMove, {
+            passive: false,
+          });
+          this.addEventListener("touchend", this.#onTouchEnd);
+        }
+
+        disconnectedCallback() {
+          this.removeEventListener("mousedown", this.#onMouseDown);
+          this.removeEventListener("mousemove", this.#onMouseMove);
+          this.removeEventListener("mouseup", this.#onMouseUp);
+          this.removeEventListener("mouseleave", this.#onMouseLeave);
+
+          this.removeEventListener("touchstart", this.#onTouchStart);
+          this.removeEventListener("touchmove", this.#onTouchMove);
+          this.removeEventListener("touchend", this.#onTouchEnd);
+        }
+
+        get panX() {
+          return this.#dx;
+        }
+
+        set panX(value) {
+          let n = typeof value === "number" ? value : 0;
+          if (Number.isNaN(n)) n = 0;
+          this.#dx = n;
+          this.#applyPan();
+        }
+
+        get panY() {
+          return this.#dy;
+        }
+
+        set panY(value) {
+          let n = typeof value === "number" ? value : 0;
+          if (Number.isNaN(n)) n = 0;
+          this.#dy = n;
+          this.#applyPan();
+        }
+
+        resetPan() {
+          this.#dx = 0;
+          this.#dy = 0;
+          this.#applyPan();
+        }
+
+        #applyPan() {
+          if (!this.#panInner) return;
+          this.#panInner.style.transform =
+            "translate(-50%, -50%) translate(" +
+            this.#dx +
+            "px, " +
+            this.#dy +
+            "px)";
+        }
+
+        #schedulePan() {
+          this.#panNeedsUpdate = true;
+          if (this.#panRafId !== null) return;
+          this.#panRafId = requestAnimationFrame(() => {
+            this.#panRafId = null;
+            if (!this.#panNeedsUpdate) return;
+            this.#panNeedsUpdate = false;
+            this.#applyPan();
+          });
+        }
+
+        #getClientXY(event) {
+          if (event.touches && event.touches.length) {
+            return {
+              x: event.touches[0].clientX,
+              y: event.touches[0].clientY,
+            };
+          }
+          return { x: event.clientX, y: event.clientY };
+        }
+
+        #startDrag(x, y) {
+          this.#drag.startX = x;
+          this.#drag.startY = y;
+          this.#drag.startDx = this.#dx;
+          this.#drag.startDy = this.#dy;
+          this.#drag.active = true;
+          this.classList.add("dragging");
+        }
+
+        #updateDrag(x, y) {
+          if (!this.#drag.active) return;
+          this.#dx = this.#drag.startDx + (x - this.#drag.startX);
+          this.#dy = this.#drag.startDy + (y - this.#drag.startY);
+          this.#schedulePan();
+        }
+
+        #endDrag() {
+          if (!this.#drag.active) return;
+          this.#drag.active = false;
+          this.classList.remove("dragging");
+          this.dispatchEvent(
+            new CustomEvent("overlay-pan-change", {
+              detail: { panX: this.#dx, panY: this.#dy },
+            }),
+          );
+        }
+      }
+      customElements.define("overlay-viewport", OverlayViewportElement);
+
+      class ToastElement extends HTMLElement {
+        #hideTimeout = null;
+
+        show(message, duration) {
+          if (typeof message === "string" && message.length) {
+            this.textContent = message;
+          } else if (!this.textContent) {
+            this.textContent = "Saved";
+          }
+
+          this.classList.add("is-visible");
+          clearTimeout(this.#hideTimeout);
+          const time = typeof duration === "number" ? duration : 900;
+          this.#hideTimeout = setTimeout(() => {
+            this.classList.remove("is-visible");
+          }, time);
+        }
+      }
+      customElements.define("overlay-toast", ToastElement);
+
+      class OverlayControlsElement extends HTMLElement {}
+      customElements.define("overlay-controls", OverlayControlsElement);
+
+      class PanelElement extends HTMLElement {
+        static get observedAttributes() {
+          return ["open"];
+        }
+
+        attributeChangedCallback(name, oldVal, newVal) {
+          if (name === "open") {
+            this.dispatchEvent(
+              new CustomEvent("panel:change", {
+                detail: { open: this.hasAttribute("open") },
+                bubbles: true,
+              }),
+            );
+          }
+        }
+
+        get open() {
+          return this.hasAttribute("open");
+        }
+      }
+      customElements.define("overlay-panel", PanelElement);
+
+      class PanelButtonElement extends HTMLElement {
+        #onClick = () => this.#handleClick();
+
+        #onKeyDown = e => this.#handleKeyDown(e);
+
+        #panels = [];
+        #onPanelChange;
+
+        connectedCallback() {
+          this.addEventListener("click", this.#onClick);
+          this.addEventListener("keydown", this.#onKeyDown);
+          if (!this.hasAttribute("role")) this.setAttribute("role", "button");
+          if (!this.hasAttribute("tabindex"))
+            this.setAttribute("tabindex", "0");
+          this.#syncFromPanels();
+        }
+
+        disconnectedCallback() {
+          if (this.#onClick) {
+            this.removeEventListener("click", this.#onClick);
+          }
+          if (this.#onKeyDown) {
+            this.removeEventListener("keydown", this.#onKeyDown);
+          }
+          if (this.#panels && this.#onPanelChange) {
+            this.#panels.forEach(panel => {
+              panel.removeEventListener("panel:change", this.#onPanelChange);
+            });
+          }
+        }
+
+        #getPanels() {
+          const id = this.getAttribute("aria-controls");
+          if (!id) return [];
+          const ids = id.split(/\s+/).filter(Boolean);
+          return ids.map(singleId => $(`#${singleId}`)).filter(Boolean);
+        }
+
+        #syncFromPanels() {
+          this.#panels = this.#getPanels();
+          if (!this.#panels.length) return;
+
+          const isOpen = this.#panels.some(panel => !!panel.open);
+          this.setAttribute("aria-expanded", isOpen ? "true" : "false");
+
+          this.#onPanelChange =
+            this.#onPanelChange ||
+            (event => {
+              const open =
+                event && event.detail && typeof event.detail.open === "boolean"
+                  ? event.detail.open
+                  : this.#panels.some(panel => !!panel.open);
+              this.setAttribute("aria-expanded", open ? "true" : "false");
+            });
+
+          this.#panels.forEach(panel => {
+            panel.addEventListener("panel:change", this.#onPanelChange);
+          });
+        }
+
+        #handleClick() {
+          const panels = this.#getPanels();
+          if (!panels.length) return;
+          const anyOpen = panels.some(panel => !!panel.open);
+          const nextOpen = !anyOpen;
+          panels.forEach(panel => {
+            if (nextOpen) {
+              panel.setAttribute("open", "");
+            } else {
+              panel.removeAttribute("open");
+            }
+          });
+          this.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        }
+
+        #handleKeyDown(e) {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          this.#handleClick();
+        }
+      }
+      customElements.define("overlay-panel-toggle", PanelButtonElement);
+
+      const AppStore = (function () {
+        function create(options) {
+          const storageKey = options.key;
+          const getState = options.getState;
+          const onAfterSave = options.onAfterSave || function () {};
+
+          function read() {
+            try {
+              const raw = localStorage.getItem(storageKey);
+              return raw ? JSON.parse(raw) : null;
+            } catch (e) {
+              return null;
+            }
+          }
+
+          function write(snapshot) {
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(snapshot));
+            } catch (e) {}
+          }
+
+          return {
+            read,
+            save: function () {
+              write(getState());
+              onAfterSave();
+            },
+          };
+        }
+
+        return { create };
+      })();
+
+      const OverlayConfig = (function () {
+        // Centralized application configuration
+        let CONFIG;
+        try {
+          const configElement = $("#overlay-config");
+          if (configElement?.textContent) {
+            CONFIG = JSON.parse(configElement.textContent);
+          } else {
+            CONFIG = {
+              imagesDir: "images/",
+              images: [],
+              screen: { widthMm: 302, heightMm: 302 },
+              paperSizes: {},
+              defaults: {
+                paperSize: "A3",
+                orientation: "auto",
+                contrast: 140,
+                brightness: 105,
+                grayscale: false,
+                gridVisible: true,
+                guidesVisible: true,
+                gridColor: "#000000",
+                guidesColor: "#ff0000",
+                theme: "dark",
+                controlsHidden: true,
+              },
+            };
+          }
+        } catch (e) {
+          CONFIG = {
+            imagesDir: "images/",
+            images: [],
+            screen: { widthMm: 302, heightMm: 302 },
+            paperSizes: {},
+            defaults: {
+              paperSize: "A3",
+              orientation: "auto",
+              contrast: 140,
+              brightness: 105,
+              grayscale: false,
+              gridVisible: true,
+              guidesVisible: true,
+              gridColor: "#000000",
+              guidesColor: "#ff0000",
+              theme: "dark",
+              controlsHidden: true,
+            },
+          };
+        }
+
+        // Helpers
+        const clamp = (value, min, max) => {
+          if (isNaN(value)) return min;
+          return Math.min(max, Math.max(min, value));
+        };
+
+        const toInt = (value, fallback) => {
+          const n = parseInt(value, 10);
+          return isNaN(n) ? fallback : n;
+        };
+
+        const isPortraitMode = orientationValue => {
+          const mode = orientationValue;
+          if (mode === "portrait") return true;
+          if (mode === "landscape") return false;
+          return window.matchMedia("(orientation: portrait)").matches;
+        };
+
+        const getPaperSizeMm = (paperSizes, paperKey, isPortrait) => {
+          const sizeDef = paperSizes[paperKey] || paperSizes.A3;
+          const orientationKey = isPortrait ? "portrait" : "landscape";
+          return sizeDef[orientationKey];
+        };
+
+        const getPxPerMm = screenWidthMmValue =>
+          window.innerWidth / screenWidthMmValue;
+
+        const getGridStepPx = pxPerMm => 10 * pxPerMm; // 10 mm = 1 cm
+
+        const applyFrameSize = ($frame, widthMm, heightMm, pxPerMm) => {
+          $frame.style.width = widthMm * pxPerMm + "px";
+          $frame.style.height = heightMm * pxPerMm + "px";
+        };
+
+        const applyGridSize = ($overlay, stepPx) => {
+          if (!$overlay) return;
+          $overlay.style.backgroundSize =
+            stepPx + "px 100%, 100% " + stepPx + "px";
+        };
+
+        const buildFilterString = (
+          contrastValuePercent,
+          brightnessValuePercent,
+          isGrayscale,
+        ) => {
+          const c = contrastValuePercent / 100;
+          const b = brightnessValuePercent / 100;
+          const parts = ["contrast(" + c + ")", "brightness(" + b + ")"];
+          if (isGrayscale) parts.unshift("saturate(0)");
+          return parts.join(" ");
+        };
+
+        const hexToRgba = (hex, alphaFallback) => {
+          const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+          if (!m) return alphaFallback;
+          const r = parseInt(m[1], 16);
+          const g = parseInt(m[2], 16);
+          const b = parseInt(m[3], 16);
+          return "rgba(" + r + ", " + g + ", " + b + ", " + alphaFallback + ")";
+        };
+
+        const setGridColorVar = gridColor => {
+          document.documentElement.style.setProperty(
+            "--grid-color",
+            hexToRgba(gridColor, 0.25),
+          );
+        };
+
+        const setGuidesColorVar = guidesColor => {
+          document.documentElement.style.setProperty(
+            "--guides-color",
+            hexToRgba(guidesColor, 0.5),
+          );
+        };
+
+        return {
+          CONFIG,
+          clamp,
+          toInt,
+          isPortraitMode,
+          getPaperSizeMm,
+          getPxPerMm,
+          getGridStepPx,
+          applyFrameSize,
+          applyGridSize,
+          buildFilterString,
+          setGridColorVar,
+          setGuidesColorVar,
+        };
+      })();
+
+      (function () {
+        const CONFIG = OverlayConfig.CONFIG;
+        const clamp = OverlayConfig.clamp;
+        const toInt = OverlayConfig.toInt;
+        const isPortraitMode = OverlayConfig.isPortraitMode;
+        const getPaperSizeMm = OverlayConfig.getPaperSizeMm;
+        const getPxPerMm = OverlayConfig.getPxPerMm;
+        const getGridStepPx = OverlayConfig.getGridStepPx;
+        const applyFrameSize = OverlayConfig.applyFrameSize;
+        const applyGridSize = OverlayConfig.applyGridSize;
+        const buildFilterString = OverlayConfig.buildFilterString;
+        const setGridColorVar = OverlayConfig.setGridColorVar;
+        const setGuidesColorVar = OverlayConfig.setGuidesColorVar;
+
+        // Main state
+        const IMAGES = CONFIG.images;
+        const IMAGES_DIR = CONFIG.imagesDir;
+
+        let screenWidthMm = CONFIG.screen.widthMm;
+
+        const $img = $(".js-paper-image");
+        const $paperFrame = $(".js-paper-frame");
+        const $gridOverlay = $(".js-grid-overlay");
+        const $centerV = $(".js-center-v");
+        const $centerH = $(".js-center-h");
+        const $panViewport = $("overlay-viewport");
+        const $panInner = $(".js-pan-inner");
+        const $whiteOverlay = $("#whiteOverlay");
+        const $toast = $("overlay-toast.js-toast");
+        const $overlayPanel = $("overlay-panel");
+        const $controlsPanel = $(".js-controls-panel");
+
+        let orientationSelectValue = CONFIG.defaults.orientation;
+        let paperSize = CONFIG.defaults.paperSize; // "A3" or "A4"
+        let theme = CONFIG.defaults.theme ?? "dark";
+
+        // Filter and grid state (before restore so saved values can overwrite)
+        let contrastValue = CONFIG.defaults.contrast;
+        let brightnessValue = CONFIG.defaults.brightness;
+        let grayscaleEnabled = CONFIG.defaults.grayscale;
+        let gridVisible = CONFIG.defaults.gridVisible;
+        let guidesVisible = CONFIG.defaults.guidesVisible;
+        let gridColor = CONFIG.defaults.gridColor;
+        let guidesColor = CONFIG.defaults.guidesColor;
+
+        function applyTheme() {
+          document.documentElement.setAttribute("data-theme", theme);
+        }
+
+        // Central place to compute default state (used by reset)
+        function applyDefaultState() {
+          orientationSelectValue = CONFIG.defaults.orientation;
+          paperSize = CONFIG.defaults.paperSize;
+          contrastValue = CONFIG.defaults.contrast;
+          brightnessValue = CONFIG.defaults.brightness;
+          grayscaleEnabled = CONFIG.defaults.grayscale;
+          gridVisible = CONFIG.defaults.gridVisible;
+          guidesVisible = CONFIG.defaults.guidesVisible;
+          gridColor = CONFIG.defaults.gridColor;
+          guidesColor = CONFIG.defaults.guidesColor;
+          screenWidthMm = CONFIG.screen.widthMm;
+          theme = CONFIG.defaults.theme ?? "dark";
+
+          if ($panViewport && $panViewport.resetPan) $panViewport.resetPan();
+        }
+
+        // Instance of OverlayStore for this app
+        const store = AppStore.create({
+          key: "overlay-store",
+          getState() {
+            return {
+              image: $img?.dataset.file ?? IMAGES[0]?.file ?? "",
+              panX:
+                typeof $panViewport?.panX === "number" ? $panViewport.panX : 0,
+              panY:
+                typeof $panViewport?.panY === "number" ? $panViewport.panY : 0,
+              contrast: contrastValue,
+              brightness: brightnessValue,
+              grayscale: grayscaleEnabled,
+              grid: gridVisible,
+              guides: guidesVisible,
+              gridColor: gridColor,
+              guidesColor: guidesColor,
+              orientation: orientationSelectValue,
+              paper: paperSize,
+              screenWidthMm: screenWidthMm,
+              whiteScreen:
+                $whiteOverlay?.classList.contains("visible") ?? false,
+              theme: theme,
+              controlsHidden:
+                !$overlayPanel?.open ?? !!CONFIG.defaults.controlsHidden,
+            };
+          },
+          onAfterSave() {
+            if (typeof $toast?.show === "function") {
+              $toast.show("Saved");
+            }
+          },
+        });
+
+        function setImageSize() {
+          const portrait = isPortraitMode(orientationSelectValue);
+          $paperFrame.classList.remove("landscape", "portrait");
+          $paperFrame.classList.add(portrait ? "portrait" : "landscape");
+          $img.style.width = "";
+          $img.style.height = "";
+
+          const pxPerMm = getPxPerMm(screenWidthMm);
+          const size = getPaperSizeMm(CONFIG.paperSizes, paperSize, portrait);
+
+          applyFrameSize($paperFrame, size.width, size.height, pxPerMm);
+          applyGridSize($gridOverlay, getGridStepPx(pxPerMm));
+        }
+
+        function selectImage(filename) {
+          $img.src = IMAGES_DIR + filename;
+          $img.dataset.file = filename;
+        }
+
+        // Restore state from localStorage
+        const saved = store.read();
+        if (saved) {
+          orientationSelectValue =
+            saved.orientation ?? CONFIG.defaults.orientation;
+          paperSize = saved.paper ?? CONFIG.defaults.paperSize;
+          contrastValue = clamp(
+            toInt(saved.contrast, CONFIG.defaults.contrast),
+            50,
+            500,
+          );
+          brightnessValue = clamp(
+            toInt(saved.brightness, CONFIG.defaults.brightness),
+            50,
+            150,
+          );
+          grayscaleEnabled = !!saved.grayscale;
+          gridVisible = !!saved.grid;
+          guidesVisible = !!saved.guides;
+          gridColor =
+            typeof saved.gridColor === "string"
+              ? saved.gridColor
+              : CONFIG.defaults.gridColor;
+          guidesColor =
+            typeof saved.guidesColor === "string"
+              ? saved.guidesColor
+              : CONFIG.defaults.guidesColor;
+          screenWidthMm = clamp(
+            toInt(saved.screenWidthMm, CONFIG.screen.widthMm),
+            50,
+            3000,
+          );
+          theme = saved.theme ?? CONFIG.defaults.theme ?? "dark";
+          if ($panViewport) {
+            if (typeof saved.panX === "number") $panViewport.panX = saved.panX;
+            if (typeof saved.panY === "number") $panViewport.panY = saved.panY;
+          }
+        }
+        setImageSize();
+        applyTheme();
+
+        // Apply initial controls visibility from saved state
+        if ($overlayPanel) {
+          const initialControlsHidden =
+            saved && typeof saved.controlsHidden === "boolean"
+              ? saved.controlsHidden
+              : !!CONFIG.defaults.controlsHidden;
+          if (initialControlsHidden) {
+            $overlayPanel.removeAttribute("open");
+          } else {
+            $overlayPanel.setAttribute("open", "");
+          }
+        }
+        let initialFile = IMAGES.length ? IMAGES[0].file : "";
+        if (
+          saved &&
+          saved.image &&
+          IMAGES.some(item => item.file === saved.image)
+        ) {
+          initialFile = saved.image;
+        }
+        if (IMAGES.length) selectImage(initialFile);
+        updateFilter();
+        updateGridVisibility();
+        updateGuidesVisibility();
+        updateGridColor();
+        updateGuidesColor();
+        if (saved && saved.whiteScreen && $whiteOverlay)
+          $whiteOverlay.classList.add("visible");
+
+        window.addEventListener("resize", setImageSize);
+        if (window.matchMedia) {
+          window
+            .matchMedia("(orientation: portrait)")
+            .addEventListener("change", function () {
+              if (orientationSelectValue === "auto") setImageSize();
+            });
+        }
+
+        function updateFilter() {
+          $img.style.filter = buildFilterString(
+            contrastValue,
+            brightnessValue,
+            grayscaleEnabled,
+          );
+        }
+
+        updateFilter();
+
+        function updateGridVisibility() {
+          if ($gridOverlay)
+            $gridOverlay.style.display = gridVisible ? "" : "none";
+        }
+
+        function updateGuidesVisibility() {
+          const displayValue = guidesVisible ? "" : "none";
+          if ($centerV) $centerV.style.display = displayValue;
+          if ($centerH) $centerH.style.display = displayValue;
+        }
+
+        function updateGridColor() {
+          setGridColorVar(gridColor);
+        }
+
+        function updateGuidesColor() {
+          setGuidesColorVar(guidesColor);
+        }
+
+        updateGridVisibility();
+        updateGuidesVisibility();
+        updateGridColor();
+        updateGuidesColor();
+        // Simple helper to reset all controls to defaults, keeping current image
+        function resetAllState() {
+          applyDefaultState();
+          setImageSize();
+          if ($panViewport && $panViewport.resetPan) $panViewport.resetPan();
+          updateFilter();
+          updateGridVisibility();
+          updateGuidesVisibility();
+          updateGridColor();
+          updateGuidesColor();
+          if ($whiteOverlay) $whiteOverlay.classList.remove("visible");
+        }
+
+        if ($panViewport) {
+          const handlePanChange = () => {
+            store.save();
+          };
+          $panViewport.addEventListener("overlay-pan-change", handlePanChange);
+        }
+
+        // Wire up controls panel
+        if ($controlsPanel) {
+          // Field controls
+          const $controlImage = $controlsPanel.querySelector(
+            '[data-control="image"]',
+          );
+          const $controlContrast = $controlsPanel.querySelector(
+            '[data-control="contrast"]',
+          );
+          const $controlBrightness = $controlsPanel.querySelector(
+            '[data-control="brightness"]',
+          );
+          const $controlGrayscale = $controlsPanel.querySelector(
+            '[data-control="grayscale"]',
+          );
+          const $controlTheme = $controlsPanel.querySelector(
+            '[data-control="theme"]',
+          );
+          const $controlGrid = $controlsPanel.querySelector(
+            '[data-control="grid"]',
+          );
+          const $controlGuides = $controlsPanel.querySelector(
+            '[data-control="guides"]',
+          );
+          const $controlGridColor = $controlsPanel.querySelector(
+            '[data-control="gridColor"]',
+          );
+          const $controlGuidesColor = $controlsPanel.querySelector(
+            '[data-control="guidesColor"]',
+          );
+          const $controlPaper = $controlsPanel.querySelector(
+            '[data-control="paper"]',
+          );
+          const $controlOrientation = $controlsPanel.querySelector(
+            '[data-control="orientation"]',
+          );
+          const $controlScreenMm = $controlsPanel.querySelector(
+            '[data-control="screenWidthMm"]',
+          );
+
+          // Action buttons
+          const $btnFullscreen = $controlsPanel.querySelector(
+            '[data-action="fullscreen"]',
+          );
+          const $btnWhiteScreen = $controlsPanel.querySelector(
+            '[data-action="whiteScreen"]',
+          );
+          const $btnReset = $controlsPanel.querySelector(
+            '[data-action="reset"]',
+          );
+
+          // Populate image select
+          if ($controlImage && IMAGES.length) {
+            IMAGES.forEach(img => {
+              const opt = document.createElement("option");
+              opt.value = img.file;
+              opt.textContent = img.name || img.file;
+              $controlImage.appendChild(opt);
+            });
+            $controlImage.value = initialFile;
+            $controlImage.addEventListener("change", event => {
+              const file = event.target.value;
+              if (!file) return;
+              selectImage(file);
+              if ($panViewport && $panViewport.resetPan)
+                $panViewport.resetPan();
+              store.save();
+            });
+          }
+
+          // Initialize values
+          if ($controlContrast) $controlContrast.value = contrastValue;
+          if ($controlBrightness) $controlBrightness.value = brightnessValue;
+          if ($controlGrayscale) $controlGrayscale.checked = !!grayscaleEnabled;
+          if ($controlTheme) $controlTheme.value = theme;
+          if ($controlGrid) $controlGrid.checked = !!gridVisible;
+          if ($controlGuides) $controlGuides.checked = !!guidesVisible;
+          if ($controlGridColor) $controlGridColor.value = gridColor;
+          if ($controlGuidesColor) $controlGuidesColor.value = guidesColor;
+          if ($controlPaper) $controlPaper.value = paperSize;
+          if ($controlOrientation)
+            $controlOrientation.value = orientationSelectValue;
+          if ($controlScreenMm) $controlScreenMm.value = screenWidthMm;
+
+          // Handlers
+          if ($controlContrast) {
+            $controlContrast.addEventListener("input", e => {
+              contrastValue = clamp(
+                toInt(e.target.value, contrastValue),
+                50,
+                500,
+              );
+              updateFilter();
+              store.save();
+            });
+          }
+
+          if ($controlBrightness) {
+            $controlBrightness.addEventListener("input", e => {
+              brightnessValue = clamp(
+                toInt(e.target.value, brightnessValue),
+                50,
+                150,
+              );
+              updateFilter();
+              store.save();
+            });
+          }
+
+          if ($controlGrayscale) {
+            $controlGrayscale.addEventListener("change", e => {
+              grayscaleEnabled = !!e.target.checked;
+              updateFilter();
+              store.save();
+            });
+          }
+
+          if ($controlTheme) {
+            $controlTheme.addEventListener("change", e => {
+              theme = e.target.value === "light" ? "light" : "dark";
+              applyTheme();
+              store.save();
+            });
+          }
+
+          if ($controlGrid) {
+            $controlGrid.addEventListener("change", e => {
+              gridVisible = !!e.target.checked;
+              updateGridVisibility();
+              store.save();
+            });
+          }
+
+          if ($controlGuides) {
+            $controlGuides.addEventListener("change", e => {
+              guidesVisible = !!e.target.checked;
+              updateGuidesVisibility();
+              store.save();
+            });
+          }
+
+          if ($controlGridColor) {
+            $controlGridColor.addEventListener("input", e => {
+              gridColor = e.target.value;
+              updateGridColor();
+              store.save();
+            });
+          }
+
+          if ($controlGuidesColor) {
+            $controlGuidesColor.addEventListener("input", e => {
+              guidesColor = e.target.value;
+              updateGuidesColor();
+              store.save();
+            });
+          }
+
+          if ($controlPaper) {
+            $controlPaper.addEventListener("change", e => {
+              paperSize = e.target.value;
+              setImageSize();
+              store.save();
+            });
+          }
+
+          if ($controlOrientation) {
+            $controlOrientation.addEventListener("change", e => {
+              orientationSelectValue = e.target.value;
+              setImageSize();
+              store.save();
+            });
+          }
+
+          if ($controlScreenMm) {
+            $controlScreenMm.addEventListener("change", e => {
+              screenWidthMm = clamp(
+                toInt(e.target.value, screenWidthMm),
+                50,
+                3000,
+              );
+              setImageSize();
+              store.save();
+            });
+          }
+
+          if ($btnFullscreen) {
+            $btnFullscreen.addEventListener("click", () => {
+              if (document.fullscreenElement) {
+                document.exitFullscreen();
+              } else {
+                document.documentElement.requestFullscreen();
+              }
+              store.save();
+            });
+          }
+
+          if ($btnWhiteScreen) {
+            $btnWhiteScreen.addEventListener("click", () => {
+              if ($whiteOverlay) {
+                $whiteOverlay.classList.toggle("visible");
+              }
+              store.save();
+            });
+          }
+
+          if ($btnReset) {
+            $btnReset.addEventListener("click", () => {
+              resetAllState();
+              applyTheme();
+              // Sync controls back to state
+              if ($controlContrast) $controlContrast.value = contrastValue;
+              if ($controlBrightness)
+                $controlBrightness.value = brightnessValue;
+              if ($controlGrayscale)
+                $controlGrayscale.checked = !!grayscaleEnabled;
+              if ($controlTheme) $controlTheme.value = theme;
+              if ($controlGrid) $controlGrid.checked = !!gridVisible;
+              if ($controlGuides) $controlGuides.checked = !!guidesVisible;
+              if ($controlGridColor) $controlGridColor.value = gridColor;
+              if ($controlGuidesColor) $controlGuidesColor.value = guidesColor;
+              if ($controlPaper) $controlPaper.value = paperSize;
+              if ($controlOrientation)
+                $controlOrientation.value = orientationSelectValue;
+              if ($controlScreenMm) $controlScreenMm.value = screenWidthMm;
+              if ($overlayPanel) {
+                if (CONFIG.defaults.controlsHidden) {
+                  $overlayPanel.removeAttribute("open");
+                } else {
+                  $overlayPanel.setAttribute("open", "");
+                }
+              }
+              store.save();
+            });
+          }
+        }
+
+        // Keyboard shortcuts
+        const handleWindowKeydown = e => {
+          // Avoid interfering with native shortcuts if modifier keys are used
+          if (e.altKey || e.metaKey || e.ctrlKey) return;
+
+          const key = e.key;
+          const active = document.activeElement;
+          const inputType =
+            active && active.tagName === "INPUT"
+              ? active.getAttribute("type") || "text"
+              : "";
+          const isTextLike =
+            active &&
+            (active.tagName === "TEXTAREA" ||
+              (active.tagName === "INPUT" &&
+                ["text", "number", "search", "email", "url"].indexOf(
+                  inputType,
+                ) !== -1));
+          const isSelect = active && active.tagName === "SELECT";
+          // Don't capture letter shortcuts when user is typing in a field
+          if (
+            isTextLike &&
+            ["g", "G", "c", "C", "w", "W", "f", "F", "r", "R"].indexOf(key) !==
+              -1
+          )
+            return;
+          // Don't capture arrows when focus is in a select (native list navigation)
+          if (
+            isSelect &&
+            ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(key) !==
+              -1
+          )
+            return;
+
+          let handled = false;
+
+          switch (key) {
+            case "Escape":
+              if ($overlayPanel && $overlayPanel.open) {
+                $overlayPanel.removeAttribute("open");
+                handled = true;
+              }
+              break;
+            case "ArrowLeft":
+              if ($panViewport) $panViewport.panX = $panViewport.panX - 10;
+              handled = true;
+              break;
+            case "ArrowRight":
+              if ($panViewport) $panViewport.panX = $panViewport.panX + 10;
+              handled = true;
+              break;
+            case "ArrowUp":
+              if ($panViewport) $panViewport.panY = $panViewport.panY - 10;
+              handled = true;
+              break;
+            case "ArrowDown":
+              if ($panViewport) $panViewport.panY = $panViewport.panY + 10;
+              handled = true;
+              break;
+            case "g":
+            case "G":
+              gridVisible = !gridVisible;
+              updateGridVisibility();
+              handled = true;
+              break;
+            case "c":
+            case "C":
+              guidesVisible = !guidesVisible;
+              updateGuidesVisibility();
+              handled = true;
+              break;
+            case "w":
+            case "W":
+              if ($whiteOverlay) {
+                $whiteOverlay.classList.toggle("visible");
+              }
+              handled = true;
+              break;
+            case "f":
+            case "F":
+              if (document.fullscreenElement) {
+                document.exitFullscreen();
+              } else {
+                document.documentElement.requestFullscreen();
+              }
+              handled = true;
+              break;
+            case "r":
+            case "R":
+              resetAllState();
+              handled = true;
+              break;
+          }
+
+          if (handled) {
+            store.save();
+            e.preventDefault();
+          }
+        };
+        window.addEventListener("keydown", handleWindowKeydown);
+
+        // Store listens to panel: when open state changes, persist and show toast
+        if ($overlayPanel) {
+          $overlayPanel.addEventListener("panel:change", e => {
+            store.save();
+            // Focus management: only move focus when user opened/closed (not on initial restore)
+            const open =
+              e.detail && typeof e.detail.open === "boolean"
+                ? e.detail.open
+                : $overlayPanel.open;
+            const active = document.activeElement;
+            if (open) {
+              if (
+                active &&
+                active.getAttribute &&
+                active.getAttribute("aria-controls") === "controlsPanel"
+              ) {
+                const first = $overlayPanel.querySelector(
+                  'button, [href], input:not([type="hidden"]), select, textarea',
+                );
+                if (first) first.focus();
+              }
+            } else {
+              if ($overlayPanel.contains(active)) {
+                const toggle = $('[aria-controls="controlsPanel"]');
+                if (toggle) toggle.focus();
+              }
+            }
+          });
+        }
+
+        // Control panel (lil-gui)
+        if (window.lil && typeof window.lil.GUI === "function") {
+          const params = {
+            image: initialFile,
+            contrast: contrastValue,
+            brightness: brightnessValue,
+            grayscale: grayscaleEnabled,
+            grid: gridVisible,
+            guides: guidesVisible,
+            gridColor: gridColor,
+            guidesColor: guidesColor,
+            orientation: orientationSelectValue,
+            paper: paperSize,
+            screenWidthMm: screenWidthMm,
+            theme: theme,
+            reset: function () {
+              resetAllState();
+              store.save();
+            },
+            fullscreen: () => {
+              if (document.fullscreenElement) {
+                document.exitFullscreen();
+              } else {
+                document.documentElement.requestFullscreen();
+              }
+            },
+            whiteScreen: () => {
+              $whiteOverlay.classList.toggle("visible");
+              store.save();
+            },
+          };
+
+          const gui = new window.lil.GUI({ title: "Overlay" });
+
+          // Image
+          gui
+            .add(
+              params,
+              "image",
+              IMAGES.map(item => {
+                return item.file;
+              }),
+            )
+            .name("Image")
+            .onChange(file => {
+              if (!file) return;
+              selectImage(file);
+              if ($panViewport && $panViewport.resetPan)
+                $panViewport.resetPan();
+              store.save();
+            });
+
+          // Contrast
+          gui
+            .add(params, "contrast", 50, 500)
+            .step(1)
+            .name("Contrast")
+            .onChange(v => {
+              contrastValue = clamp(toInt(v, contrastValue), 50, 500);
+              params.contrast = contrastValue;
+              updateFilter();
+              store.save();
+            });
+
+          // Brightness
+          gui
+            .add(params, "brightness", 50, 150)
+            .step(1)
+            .name("Brightness")
+            .onChange(v => {
+              brightnessValue = clamp(toInt(v, brightnessValue), 50, 150);
+              params.brightness = brightnessValue;
+              updateFilter();
+              store.save();
+            });
+
+          // Grayscale
+          gui
+            .add(params, "grayscale")
+            .name("Grayscale")
+            .onChange(v => {
+              grayscaleEnabled = !!v;
+              updateFilter();
+              store.save();
+            });
+
+          // Orientation
+          gui
+            .add(params, "orientation", ["auto", "landscape", "portrait"])
+            .name("Orientation")
+            .onChange(v => {
+              orientationSelectValue = v;
+              setImageSize();
+              store.save();
+            });
+
+          // Grid
+          gui
+            .add(params, "grid")
+            .name("Grid")
+            .onChange(v => {
+              gridVisible = !!v;
+              updateGridVisibility();
+              store.save();
+            });
+
+          // Grid color
+          gui
+            .addColor(params, "gridColor")
+            .name("Grid color")
+            .onChange(v => {
+              gridColor = v;
+              updateGridColor();
+              store.save();
+            });
+
+          // Center guides
+          gui
+            .add(params, "guides")
+            .name("Center guides")
+            .onChange(v => {
+              guidesVisible = !!v;
+              updateGuidesVisibility();
+              store.save();
+            });
+
+          // Guides color
+          gui
+            .addColor(params, "guidesColor")
+            .name("Guides color")
+            .onChange(v => {
+              guidesColor = v;
+              updateGuidesColor();
+              store.save();
+            });
+
+          // Paper size
+          gui
+            .add(params, "paper", ["A3", "A4"])
+            .name("Paper size")
+            .onChange(v => {
+              paperSize = v;
+              setImageSize();
+              store.save();
+            });
+
+          // Theme
+          gui
+            .add(params, "theme", ["dark", "light"])
+            .name("Theme")
+            .onChange(v => {
+              theme = v === "light" ? "light" : "dark";
+              applyTheme();
+              store.save();
+            });
+
+          // Screen calibration
+          const screenFolder = gui.addFolder("Screen");
+          screenFolder
+            .add(params, "screenWidthMm", 200, 800)
+            .step(1)
+            .name("Width (mm)")
+            .onChange(v => {
+              screenWidthMm = clamp(toInt(v, screenWidthMm), 50, 3000);
+              params.screenWidthMm = screenWidthMm;
+              setImageSize();
+              store.save();
+            });
+
+          // Actions
+          gui.add(params, "reset").name("Reset");
+          gui.add(params, "fullscreen").name("Fullscreen");
+          gui.add(params, "whiteScreen").name("White screen");
+        }
+      })();
+    </script>
+  </body>
+</html>
