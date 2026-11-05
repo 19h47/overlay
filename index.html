@@ -185,12 +185,33 @@
         display: contents;
       }
 
-      /* The pills stay top-left, facing the toolbar, floating like it over the sheet */
-      .overlay-pills {
+      /*
+       * The pills top-left, the toolbar top-right, floating over the sheet; where the screen has no room for both on
+       * a line, the toolbar goes under the pills
+       */
+      .overlay-bar {
         position: fixed;
-        top: var(--app-u2);
-        left: var(--app-u2);
+        inset: var(--app-u2) var(--app-u2) auto;
         z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--app-control-gap);
+        /* Between the pills and the toolbar, the sheet is still dragged */
+        pointer-events: none;
+      }
+
+      .overlay-bar > * {
+        pointer-events: auto;
+      }
+
+      .overlay-bar .app-toolbar {
+        position: static;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        margin-left: auto;
+      }
+
+      .overlay-pills {
         display: flex;
         flex-wrap: wrap;
         gap: var(--app-control-gap);
@@ -697,115 +718,117 @@
 
     <div class="overlay-white-screen" aria-hidden="true"></div>
 
-    <div class="overlay-pills">
-      <overlay-field>
-        <label class="app-pill">
-          <span class="sr-only">Image</span>
-          <select name="image">
-            <button>
-              <strong aria-hidden="true">Image</strong>
-              <selectedcontent></selectedcontent>
-            </button>
-          </select>
-        </label>
-      </overlay-field>
-      <overlay-field>
-        <label class="app-pill">
-          <span class="sr-only">Format</span>
-          <select name="paper">
-            <button>
-              <strong aria-hidden="true">Format</strong>
-              <selectedcontent></selectedcontent>
-            </button>
-            <option value="A3">A3</option>
-            <option value="A4">A4</option>
-          </select>
-        </label>
-      </overlay-field>
-      <overlay-field>
-        <label class="app-pill">
-          <span class="sr-only">Orientation</span>
-          <select name="orientation">
-            <button>
-              <strong aria-hidden="true">Orientation</strong>
-              <selectedcontent></selectedcontent>
-            </button>
-            <option value="auto">Auto</option>
-            <option value="landscape">Paysage</option>
-            <option value="portrait">Portrait</option>
-          </select>
-        </label>
-      </overlay-field>
-    </div>
+    <div class="overlay-bar">
+      <div class="overlay-pills">
+        <overlay-field>
+          <label class="app-pill">
+            <span class="sr-only">Image</span>
+            <select name="image">
+              <button>
+                <strong aria-hidden="true">Image</strong>
+                <selectedcontent></selectedcontent>
+              </button>
+            </select>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="app-pill">
+            <span class="sr-only">Format</span>
+            <select name="paper">
+              <button>
+                <strong aria-hidden="true">Format</strong>
+                <selectedcontent></selectedcontent>
+              </button>
+              <option value="A3">A3</option>
+              <option value="A4">A4</option>
+            </select>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="app-pill">
+            <span class="sr-only">Orientation</span>
+            <select name="orientation">
+              <button>
+                <strong aria-hidden="true">Orientation</strong>
+                <selectedcontent></selectedcontent>
+              </button>
+              <option value="auto">Auto</option>
+              <option value="landscape">Paysage</option>
+              <option value="portrait">Portrait</option>
+            </select>
+          </label>
+        </overlay-field>
+      </div>
 
-    <div class="app-toolbar">
-      <button
-        class="app-control"
-        type="button"
-        popovertarget="overlay-settings"
-        aria-label="Réglages"
-        title="Réglages"
-      >
-        ⚙&#xFE0E;
-      </button>
-      <overlay-toggle name="grid">
+      <div class="app-toolbar">
         <button
           class="app-control"
           type="button"
-          aria-label="Grille (G)"
-          title="Grille (G)"
+          popovertarget="overlay-settings"
+          aria-label="Réglages"
+          title="Réglages"
         >
-          #
+          ⚙&#xFE0E;
         </button>
-      </overlay-toggle>
-      <overlay-toggle name="guides">
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Repères au centre (C)"
-          title="Repères au centre (C)"
-        >
-          +
-        </button>
-      </overlay-toggle>
-      <overlay-toggle name="locked">
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Verrouiller la position (L)"
-          title="Verrouiller la position (L)"
-        >
-          ⚿&#xFE0E;
-        </button>
-      </overlay-toggle>
-      <overlay-toggle name="whiteScreen">
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Écran blanc (W)"
-          title="Écran blanc (W)"
-        >
-          □&#xFE0E;
-        </button>
-      </overlay-toggle>
-      <overlay-fullscreen-toggle>
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Plein écran (F)"
-          title="Plein écran (F)"
-        >
-          ⤢&#xFE0E;
-        </button>
-      </overlay-fullscreen-toggle>
-      <overlay-theme-toggle>
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Thème sombre"
-          title="Thème clair/sombre"
-        ></button>
-      </overlay-theme-toggle>
+        <overlay-toggle name="grid">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Grille (G)"
+            title="Grille (G)"
+          >
+            #
+          </button>
+        </overlay-toggle>
+        <overlay-toggle name="guides">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Repères au centre (C)"
+            title="Repères au centre (C)"
+          >
+            +
+          </button>
+        </overlay-toggle>
+        <overlay-toggle name="locked">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Verrouiller la position (L)"
+            title="Verrouiller la position (L)"
+          >
+            ⚿&#xFE0E;
+          </button>
+        </overlay-toggle>
+        <overlay-toggle name="whiteScreen">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Écran blanc (W)"
+            title="Écran blanc (W)"
+          >
+            □&#xFE0E;
+          </button>
+        </overlay-toggle>
+        <overlay-fullscreen-toggle>
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Plein écran (F)"
+            title="Plein écran (F)"
+          >
+            ⤢&#xFE0E;
+          </button>
+        </overlay-fullscreen-toggle>
+        <overlay-theme-toggle>
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Thème sombre"
+            title="Thème clair/sombre"
+          ></button>
+        </overlay-theme-toggle>
+      </div>
     </div>
 
     <div
