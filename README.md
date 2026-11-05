@@ -8,7 +8,7 @@ A tiny, single-page tracing app. Lay an A3 or A4 sheet on the screen, and copy t
 - **Your own image** — The ⤒ button opens an image of the device, without adding it to the project: it joins the list of the images until the page is closed, and is not saved.
 - **Grid and guides** — A grid of squares from 1 cm to 10 cm, the crosshair at the center and the edge of the sheet to lay the paper on, each with its own color, shown or hidden with **G** and **C**.
 - **Pan** — Drag the sheet with a mouse, a finger or a pen, or move it with the arrow keys. **L** locks it in place, so that a hand or a pen on the paper does not move it.
-- **Framing** — Zoom and turn the image in the settings, or zoom it with **+** and **−**; with ✥ or **I**, the drag and the arrows move the image on the sheet rather than the sheet. The image ends at the edge of the sheet. The lock holds it too: its zoom and its rotation can't be changed while it is on.
+- **Framing** — Zoom, turn and mirror the image in the settings, or zoom it with **+** and **−** and mirror it with **M**; with ✥ or **I**, the drag and the arrows move the image on the sheet rather than the sheet. The image ends at the edge of the sheet. The lock holds it too: its zoom, its rotation and its mirror can't be changed while it is on.
 - **Screen kept on** — The screen does not go to sleep while the page is shown, where the browser allows it (Screen Wake Lock API).
 - **Filters** — Contrast, brightness and grayscale.
 - **White screen** — **W** lights the paper in white, to check the drawing.

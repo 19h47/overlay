@@ -110,11 +110,14 @@
         width: 100%;
         height: 100%;
         object-fit: contain;
-        /* Moved on the sheet, then turned and zoomed around its center */
+        /* Moved on the sheet, then turned, zoomed and flipped around its center */
         translate: var(--overlay-image-pan-x, 0px)
           var(--overlay-image-pan-y, 0px);
         rotate: calc(var(--overlay-image-rotation, 0) * 1deg);
-        scale: calc(var(--overlay-image-scale, 100) / 100);
+        scale: calc(
+            var(--overlay-image-flip, 1) * var(--overlay-image-scale, 100) / 100
+          )
+          calc(var(--overlay-image-scale, 100) / 100);
         filter: grayscale(var(--overlay-grayscale, 0))
           contrast(calc(var(--overlay-contrast) * 1%))
           brightness(calc(var(--overlay-brightness) * 1%));
@@ -122,6 +125,11 @@
 
       overlay-sheet[data-grayscale] img {
         --overlay-grayscale: 1;
+      }
+
+      /* In a mirror, left to right */
+      overlay-sheet[data-mirrored] img {
+        --overlay-image-flip: -1;
       }
 
       .overlay-sheet__grid,
@@ -619,6 +627,7 @@
           imagePanY: finite,
           imageScale: between(25, 400),
           imageRotation: between(-180, 180),
+          mirrored: boolean,
           locked: boolean,
           whiteScreen: boolean,
         };
@@ -633,11 +642,15 @@
           imagePanY: 0,
           imageScale: 100,
           imageRotation: 0,
+          mirrored: false,
           locked: false,
           whiteScreen: false,
         };
 
-        /** What the lock holds still: where the sheet and the image are, and how large and turned the image is. */
+        /**
+         * What the lock holds still: where the sheet and the image are, how
+         * large and turned the image is, and which way it faces.
+         */
         const HELD = [
           "panX",
           "panY",
@@ -645,6 +658,7 @@
           "imagePanY",
           "imageScale",
           "imageRotation",
+          "mirrored",
         ];
 
         /**
@@ -1023,6 +1037,12 @@
         </overlay-field>
         <overlay-field>
           <label class="overlay-settings__field">
+            <span>Miroir</span>
+            <input type="checkbox" name="mirrored" />
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
             <span>Contraste</span>
             <input type="range" name="contrast" min="50" max="500" step="1" />
             <span><output></output> %</span>
@@ -1186,6 +1206,10 @@
                 <kbd>+</kbd> <kbd>−</kbd>
               </td>
               <td>Zoom</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>M</kbd></td>
+              <td>Miroir</td>
             </tr>
             <tr>
               <td class="overlay-shortcuts__keys"><kbd>G</kbd></td>
@@ -1363,6 +1387,9 @@
                 "--overlay-image-rotation",
                 imageRotation.toString(),
               );
+            },
+            mirrored: mirrored => {
+              this.toggleAttribute("data-mirrored", mirrored);
             },
             paper: paper => {
               this.dataset.paper = paper;
@@ -1647,6 +1674,7 @@
         "+": () => store.step("imageScale", ZOOM_STEP),
         "-": () => store.step("imageScale", -ZOOM_STEP),
         i: () => store.toggle("moveImage"),
+        m: () => store.toggle("mirrored"),
         g: () => store.toggle("grid"),
         c: () => store.toggle("guides"),
         l: () => store.toggle("locked"),
