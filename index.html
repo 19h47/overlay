@@ -187,6 +187,14 @@
         visibility: visible;
       }
 
+      /* The label of a file input is its control: it shows the focus of the input */
+      .app-control:has(:focus-visible) {
+        border-color: var(--app-line);
+        color: var(--app-text);
+        outline: var(--app-focus-outline);
+        outline-offset: var(--app-focus-outline-offset);
+      }
+
       /* A field brick lays out nothing: the label it holds does */
       overlay-field {
         display: contents;
@@ -580,9 +588,12 @@
         const color = value =>
           /^#[\da-f]{6}$/i.test(value) ? value : undefined;
 
-        /** Each option of the page, and what it accepts: anything else is undefined. */
+        /** Each option of the page, and what it accepts given the state: anything else is undefined. */
         const OPTIONS = {
-          image: oneOf(config.images.map(({ file }) => file)),
+          image: (value, { localImage }) =>
+            [...config.images, localImage].some(image => image?.file === value)
+              ? value
+              : undefined,
           paper: oneOf(["A3", "A4"]),
           orientation: oneOf(["auto", "landscape", "portrait"]),
           contrast: between(50, 500),
@@ -609,8 +620,12 @@
           whiteScreen: false,
         };
 
-        /** What localStorage holds, checked: anything else falls back. */
-        function load() {
+        /**
+         * What localStorage holds, checked: anything else falls back to the
+         * current state. An image opened from the device lives as long as
+         * the page: none at first, and the one of another tab is not this one.
+         */
+        function load(current = { ...DEFAULTS, localImage: null }) {
           let saved = null;
           try {
             saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -618,7 +633,7 @@
           const options = Object.fromEntries(
             Object.entries(OPTIONS).map(([name, accept]) => [
               name,
-              accept(saved?.[name]) ?? DEFAULTS[name],
+              accept(saved?.[name], current) ?? current[name],
             ]),
           );
           const theme = ["light", "dark"].includes(saved?.theme)
@@ -626,6 +641,7 @@
             : null;
           return {
             ...options,
+            localImage: current.localImage,
             // The theme shown, and whether it was chosen over the system one.
             theme: theme ?? (darkQuery.matches ? "dark" : "light"),
             themeChosen: theme !== null,
@@ -658,12 +674,15 @@
             // its own waiting to be saved.
             addEventListener("storage", ({ key }) => {
               if (key !== STORAGE_KEY || this.#pending) return;
-              this.set(state => ({ ...state, ...load() }));
+              this.set(state => ({ ...state, ...load(state) }));
             });
           }
 
+          /** The images of the list, then the one opened from the device. */
           get images() {
-            return config.images;
+            const { localImage } = this.get();
+
+            return localImage ? [...config.images, localImage] : config.images;
           }
 
           get imagesDir() {
@@ -672,7 +691,7 @@
 
           /** A value the option does not accept is ignored; a number is kept within its bounds. */
           setOption(name, value) {
-            const accepted = OPTIONS[name]?.(value);
+            const accepted = OPTIONS[name]?.(value, this.get());
 
             if (accepted === undefined) return;
 
@@ -685,6 +704,15 @@
 
           step(name, by) {
             this.setOption(name, this.get()[name] + by);
+          }
+
+          /** Shows an image of the device, in place of the one opened before. */
+          openImage(file) {
+            const { localImage } = this.get();
+            const image = { name: file.name, file: URL.createObjectURL(file) };
+
+            if (localImage) URL.revokeObjectURL(localImage.file);
+            this.#change({ localImage: image, image: image.file });
           }
 
           /** Locked, the sheet stays where it is: neither dragged nor moved by the keys. */
@@ -714,7 +742,7 @@
           #write() {
             clearTimeout(this.#saveTimeout);
             if (!this.#pending) return;
-            const { theme, themeChosen, ...options } = this.get();
+            const { theme, themeChosen, localImage, ...options } = this.get();
             try {
               localStorage.setItem(
                 STORAGE_KEY,
@@ -830,6 +858,13 @@
       </div>
 
       <div class="app-toolbar">
+        <overlay-image-opener>
+          <label class="app-control" title="Ouvrir une image">
+            <input class="sr-only" type="file" accept="image/*" />
+            <span class="sr-only">Ouvrir une image</span>
+            <span aria-hidden="true">⤒&#xFE0E;</span>
+          </label>
+        </overlay-image-opener>
         <button
           class="app-control"
           type="button"
@@ -1211,10 +1246,14 @@
           this.#controller = new AbortController();
           const { signal } = this.#controller;
 
+          // A file of the list is in the images directory; the URL of an
+          // image opened from the device stays as it is.
+          const imagesUrl = new URL(store.imagesDir, document.baseURI);
+
           const renders = {
             image: file => {
               const image = store.images.find(item => item.file === file);
-              $image.src = store.imagesDir + file;
+              $image.src = new URL(file, imagesUrl).href;
               $image.alt = image.name;
             },
             paper: paper => {
@@ -1307,12 +1346,45 @@
       }
 
       // The images are options of the select before the field shows the
-      // current one.
+      // current one, an image opened from the device among them. The
+      // button that shows the one chosen comes with the HTML.
       const $imageSelect = document.querySelector('select[name="image"]');
-      for (const { name, file } of store.images) {
-        $imageSelect.append(new Option(name, file));
-      }
+      store.select(
+        state => state.localImage,
+        () => {
+          $imageSelect.options.length = 0;
+          $imageSelect.append(
+            ...store.images.map(({ name, file }) => new Option(name, file)),
+          );
+        },
+      );
       customElements.define("overlay-field", OverlayFieldElement);
+
+      /** Opens an image of the device: the input its label holds asks for it. */
+      class OverlayImageOpenerElement extends HTMLElement {
+        #controller = null;
+
+        connectedCallback() {
+          const $input = this.querySelector('input[type="file"]');
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+          $input.addEventListener(
+            "change",
+            () => {
+              const [file] = $input.files;
+              if (file) store.openImage(file);
+              // The same file, opened again, changes the input again.
+              $input.value = "";
+            },
+            { signal },
+          );
+        }
+
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define("overlay-image-opener", OverlayImageOpenerElement);
 
       /** A button that switches on and off the option of the store its name gives. */
       class OverlayToggleElement extends HTMLElement {
