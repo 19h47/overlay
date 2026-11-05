@@ -1,589 +1,378 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Un calque pour reproduire une image sur une feuille A3 ou A4 posée sur l’écran."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" />
     <title>Overlay</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="app-style.css" />
     <style>
+      /* What Overlay adds to app-style.css, the base shared by the small apps */
+
       :root {
-        /* Color tokens (Tailwind-inspired) */
-        --color-neutral-900: #1a1a1a;
-        --color-neutral-100: #f5f5f5;
-        --color-white: #ffffff;
-        --color-black-25: rgba(0, 0, 0, 0.25);
-        --color-black-15: rgba(0, 0, 0, 0.15);
-        --color-red-500-50: rgba(255, 0, 0, 0.5);
-        --color-red-500-40: rgba(255, 0, 0, 0.4);
-        --color-neutral-800: #1f1f1f;
-        --color-neutral-700: #333333;
-        --color-neutral-300: #cfcfcf;
-        --color-neutral-50: #f0f0f0;
-        --color-neutral-950: #111111;
+        --overlay-u4: calc(var(--app-phi) * var(--app-u3));
+        /* Three steps above --overlay-u4 */
+        --overlay-panel-width: calc(
+          var(--overlay-u4) * var(--app-phi) * var(--app-phi) * var(--app-phi)
+        );
 
-        /* Colors (dark theme by default) */
-        --app-bg: var(--color-neutral-900);
-        --overlay-bg: var(--color-white);
-        /* Default: semi-transparent black grid, semi-transparent red guides */
-        --grid-color: var(--color-black-25);
-        --guides-color: var(--color-red-500-50);
-        /* Panel / toast colors */
-        --panel-bg: var(--color-neutral-800);
-        --panel-border: var(--color-neutral-700);
-        --panel-text: var(--color-neutral-50);
-        /* Line widths */
-        --grid-line-width: 0.0625rem; /* 1px */
-        --guide-line-width: 0.125rem; /* 2px */
-        /* Animation duration */
-        --overlay-transition-duration: 0.2s;
-        /* Base font */
-        font-family:
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif;
+        /* The white screen lights the paper, whatever the theme */
+        --overlay-white: rgb(255, 255, 255);
+        --overlay-grid-line-width: 1px;
+        --overlay-guide-line-width: 2px;
+
+        --overlay-transition-2: calc(
+          var(--app-transition-1) * var(--app-phi)
+        );
       }
 
-      [data-theme="light"] {
-        --app-bg: var(--color-neutral-100);
-        --overlay-bg: var(--color-white);
-        --grid-color: var(--color-black-15);
-        --guides-color: var(--color-red-500-40);
-        --panel-bg: var(--color-white);
-        --panel-border: var(--color-neutral-300);
-        --panel-text: var(--color-neutral-950);
-      }
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      html,
-      body {
-        height: 100%;
-        margin: 0;
-        background: var(--app-bg);
+      html {
         overflow: hidden;
       }
 
-      /* Viewport: fullscreen, draggable centered image */
-      .pan-viewport {
+      /* Viewport: the whole screen, the sheet dragged in it */
+
+      overlay-viewport {
         position: fixed;
         inset: 0;
         overflow: hidden;
         cursor: grab;
+        touch-action: none;
         user-select: none;
       }
 
-      .pan-viewport.dragging {
+      overlay-viewport:state(dragging) {
         cursor: grabbing;
       }
 
-      .pan-inner {
+      /* Locked, the sheet stays where it is */
+      overlay-viewport:state(locked) {
+        cursor: default;
+      }
+
+      /*
+       * The sheet, at the size of the paper laid on the screen: a millimetre of paper is the width of the screen
+       * divided by its width in millimetres. Its long side across, unless it stands in portrait.
+       */
+      overlay-sheet {
+        --overlay-mm: calc(100vw / var(--overlay-screen-width));
+        --overlay-sheet-width: var(--overlay-paper-long);
+        --overlay-sheet-height: var(--overlay-paper-short);
+
         position: absolute;
-        left: 50%;
         top: 50%;
-        transform: translate(-50%, -50%);
-        cursor: grab;
+        left: 50%;
+        width: calc(var(--overlay-sheet-width) * var(--overlay-mm));
+        height: calc(var(--overlay-sheet-height) * var(--overlay-mm));
+        translate: calc(var(--overlay-pan-x, 0px) - 50%)
+          calc(var(--overlay-pan-y, 0px) - 50%);
       }
 
-      .pan-viewport.dragging .pan-inner {
-        cursor: grabbing;
+      overlay-sheet[data-paper="A3"] {
+        --overlay-paper-short: 297;
+        --overlay-paper-long: 420;
       }
 
-      .pan-viewport:focus {
-        outline: none;
+      overlay-sheet[data-paper="A4"] {
+        --overlay-paper-short: 210;
+        --overlay-paper-long: 297;
       }
 
-      .pan-viewport:focus-visible {
-        outline: 2px solid var(--panel-text);
-        outline-offset: -2px;
+      overlay-sheet[data-orientation="portrait"] {
+        --overlay-sheet-width: var(--overlay-paper-short);
+        --overlay-sheet-height: var(--overlay-paper-long);
       }
 
-      .paper-frame {
-        position: relative;
-        display: inline-block;
+      @media (orientation: portrait) {
+        overlay-sheet[data-orientation="auto"] {
+          --overlay-sheet-width: var(--overlay-paper-short);
+          --overlay-sheet-height: var(--overlay-paper-long);
+        }
       }
 
-      .paper-frame img {
+      overlay-sheet img {
         display: block;
-      }
-
-      .paper-frame.landscape img,
-      .paper-frame.portrait img {
         width: 100%;
         height: 100%;
         object-fit: contain;
+        filter: grayscale(var(--overlay-grayscale, 0))
+          contrast(calc(var(--overlay-contrast) * 1%))
+          brightness(calc(var(--overlay-brightness) * 1%));
       }
 
-      /* 1 cm × 1 cm grid overlay (color via CSS variable) */
-      .paper-frame .grid-overlay {
+      overlay-sheet[data-grayscale] img {
+        --overlay-grayscale: 1;
+      }
+
+      .overlay-sheet__grid,
+      .overlay-sheet__guides {
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        inset: 0;
         pointer-events: none;
+      }
+
+      /* Squares of the step, in centimetres, centered on the sheet */
+      .overlay-sheet__grid {
+        --overlay-grid-line: color-mix(
+          in srgb,
+          var(--overlay-grid-color) 25%,
+          transparent
+        );
+        --overlay-grid-step: calc(var(--overlay-grid-cm) * 10 * var(--overlay-mm));
+
         background-image:
           linear-gradient(
             to right,
-            var(--grid-color) var(--grid-line-width),
-            transparent var(--grid-line-width)
+            var(--overlay-grid-line) var(--overlay-grid-line-width),
+            transparent 0
           ),
           linear-gradient(
             to bottom,
-            var(--grid-color) var(--grid-line-width),
-            transparent var(--grid-line-width)
+            var(--overlay-grid-line) var(--overlay-grid-line-width),
+            transparent 0
           );
-        /* Centered; grid may extend beyond edges */
+        background-size:
+          var(--overlay-grid-step) 100%,
+          100% var(--overlay-grid-step);
         background-position:
           center 0,
           0 center;
       }
 
-      /* Center lines (color via CSS variable) */
-      .paper-frame .center-v,
-      .paper-frame .center-h {
-        position: absolute;
-        pointer-events: none;
-        background: var(--guides-color);
+      /* A line across the middle of the sheet, a line down it, and its edge to lay the paper on */
+      .overlay-sheet__guides {
+        --overlay-guide-line: color-mix(
+          in srgb,
+          var(--overlay-guides-color) 50%,
+          transparent
+        );
+
+        box-shadow: inset 0 0 0 var(--overlay-guide-line-width)
+          var(--overlay-guide-line);
+        background:
+          linear-gradient(var(--overlay-guide-line), var(--overlay-guide-line))
+            center / var(--overlay-guide-line-width) 100% no-repeat,
+          linear-gradient(var(--overlay-guide-line), var(--overlay-guide-line))
+            center / 100% var(--overlay-guide-line-width) no-repeat;
       }
 
-      .paper-frame .center-v {
-        left: 50%;
-        top: 0;
-        bottom: 0;
-        width: var(--guide-line-width);
-        transform: translateX(-50%);
-      }
-
-      .paper-frame .center-h {
-        top: 50%;
-        left: 0;
-        right: 0;
-        height: var(--guide-line-width);
-        transform: translateY(-50%);
-      }
-
-      .white-overlay {
+      /* Over the sheet, under the pills and the toolbar */
+      .overlay-white-screen {
         position: fixed;
         inset: 0;
-        background: var(--overlay-bg);
-        z-index: 5;
+        background: var(--overlay-white);
         pointer-events: none;
         opacity: 0;
         visibility: hidden;
         transition:
-          opacity var(--overlay-transition-duration) ease,
-          visibility var(--overlay-transition-duration) ease;
+          opacity var(--overlay-transition-2),
+          visibility var(--overlay-transition-2);
       }
 
-      .white-overlay.visible {
+      :root[data-white-screen] .overlay-white-screen {
         opacity: 1;
         visibility: visible;
       }
 
-      /* Small toast to show when state has been saved */
-      .toast {
+      /* A field brick lays out nothing: the label it holds does */
+      overlay-field {
+        display: contents;
+      }
+
+      /* The pills stay top-left, facing the toolbar, floating like it over the sheet */
+      .overlay-pills {
         position: fixed;
-        left: 50%;
-        bottom: 1rem; /* 16px */
-        transform: translate(-50%, 0.5rem); /* 8px */
-        padding: 0.25rem 0.75rem; /* 4px 12px */
-        font-size: 0.75rem; /* 12px */
-        line-height: 1.4;
-        pointer-events: none;
+        top: var(--app-u2);
+        left: var(--app-u2);
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--app-control-gap);
+      }
+
+      .overlay-pills .app-pill {
+        background: var(--app-bg-floating);
+        backdrop-filter: var(--app-blur-floating);
+      }
+
+      /* A panel: the settings under the toolbar, the shortcuts in the bottom-right corner */
+      .overlay-panel {
+        /* Reset the UA popover centering: each panel sets its corner */
+        margin: 0;
+        padding: var(--app-u2);
+        max-width: calc(100vw - 2 * var(--app-u2));
+        border: 1px solid var(--app-line-soft);
+        border-radius: var(--app-radius);
+        background: var(--app-bg);
+        color: var(--app-text);
+        font-family: var(--app-font-ui);
+        font-size: var(--app-font-small);
         opacity: 0;
+        translate: 0 var(--overlay-panel-from);
         transition:
-          opacity 0.15s ease,
-          transform 0.15s ease;
-        z-index: 10;
+          opacity var(--app-transition-1),
+          translate var(--app-transition-1),
+          display var(--app-transition-1) allow-discrete,
+          overlay var(--app-transition-1) allow-discrete;
       }
 
-      .toast.is-visible {
+      .overlay-panel:popover-open {
         opacity: 1;
-        transform: translate(-50%, 0);
+        translate: 0 0;
+
+        @starting-style {
+          opacity: 0;
+          translate: 0 var(--overlay-panel-from);
+        }
       }
 
-      .shortcuts-hotzone {
+      .overlay-panel__title {
+        margin-bottom: var(--app-u1);
+      }
+
+      [popovertarget="overlay-settings"] {
+        anchor-name: --overlay-settings;
+      }
+
+      /*
+       * The settings float from their button, a gap away, under it and along its right edge; where the screen has no
+       * room, above it or along its left edge. Within the screen, they scroll.
+       */
+      .overlay-settings {
+        --overlay-panel-from: calc(-1 * var(--app-u0));
+
+        position-anchor: --overlay-settings;
+        inset: auto;
+        position-area: block-end span-inline-start;
+        position-try-fallbacks:
+          flip-block,
+          flip-inline,
+          flip-block flip-inline;
+        margin-block: var(--app-gap);
+        /* Without stretch (Firefox), the room under the toolbar */
+        max-block-size: calc(
+          100dvh - var(--app-u2) - var(--app-control-size) - 2 * var(--app-gap)
+        );
+        max-block-size: stretch;
+        overflow: auto;
+      }
+
+      /* A field a line: its name, its control, wide enough for a number of four digits, its value */
+      .overlay-settings__fields {
+        display: grid;
+        grid-template-columns: auto calc(var(--overlay-u4) * var(--app-phi)) auto;
+        gap: var(--app-u1) var(--app-u0);
+        align-items: center;
+        margin-bottom: var(--app-u2);
+      }
+
+      .overlay-settings__field {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: subgrid;
+        align-items: center;
+      }
+
+      .overlay-settings__field input {
+        accent-color: var(--app-text);
+        font: inherit;
+        color: inherit;
+      }
+
+      .overlay-settings__field :is([type="checkbox"], [type="color"]) {
+        justify-self: start;
+      }
+
+      .overlay-settings__field [type="range"] {
+        width: 100%;
+      }
+
+      .overlay-settings__field .app-field {
+        width: 100%;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* The square of a control, with the line of a field */
+      .overlay-settings__field [type="color"] {
+        width: var(--app-control-size);
+        height: var(--app-control-size);
+        padding: 0;
+        border: 1px solid var(--app-line-soft);
+        border-radius: var(--app-radius);
+        background: transparent;
+      }
+
+      .overlay-settings__field output {
+        font-variant-numeric: tabular-nums;
+        text-align: end;
+      }
+
+      overlay-shortcuts {
         position: fixed;
         right: 0;
         bottom: 0;
-        width: 2rem; /* 32px */
-        height: 2rem; /* 32px */
-        z-index: 8;
+        z-index: 1;
       }
 
-      .shortcuts-panel {
-        position: fixed;
-        right: 1rem;
-        bottom: 1rem;
-        padding: 0.5rem 0.75rem;
-        line-height: 1.5;
-        z-index: 9;
-        max-width: 13.75rem;
-        opacity: 0;
-        transform: translateY(0.375rem);
-        pointer-events: none;
-        transition:
-          opacity 0.15s ease,
-          transform 0.15s ease;
-      }
-
-      .shortcuts-hotzone:hover + .shortcuts-panel,
-      .shortcuts-panel:hover {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
-        box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.35);
-      }
-
-      .shortcuts-panel__title {
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-        font-size: 0.75rem;
-      }
-
-      .shortcuts-panel__list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-      }
-
-      .shortcuts-panel__item code {
-        font-family:
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          "SF Mono",
-          Menlo,
-          Monaco,
-          Consolas,
-          "Liberation Mono",
-          "Courier New",
-          monospace;
-        font-size: 0.625rem; /* 10px */
-        padding: 0.0625rem 0.25rem; /* 1px 4px */
-        border-radius: 0.25rem; /* 4px */
-        background: rgba(255, 255, 255, 0.12);
-        margin-right: 0.25rem; /* 4px */
-      }
-
-      /* Utility-like helpers */
-      .u-panel {
-        border-radius: 0.25rem;
-        background: var(--panel-bg);
-        border: 1px solid var(--panel-border);
-        color: var(--panel-text);
-      }
-
-      .u-text-xs {
-        font-size: 0.75rem;
-      }
-
-      .u-flex {
-        display: flex;
-      }
-
-      .u-items-center {
-        align-items: center;
-      }
-
-      .u-justify-between {
-        justify-content: space-between;
-      }
-
-      /* Main controls panel */
-      .controls-panel {
-        position: fixed;
-        top: 1rem;
-        right: 1rem;
-        max-width: 18rem;
-        padding: 0.5rem 0.75rem;
-        font-size: 0.75rem;
-        line-height: 1.5;
-        z-index: 9;
-        transition:
-          opacity 0.15s ease,
-          transform 0.15s ease;
-      }
-
-      .controls-panel__section {
-        margin-bottom: 0.5rem;
-      }
-
-      .controls-panel__section:last-child {
-        margin-bottom: 0;
-      }
-
-      .controls-panel__title {
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-      }
-
-      .controls-panel__field {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        margin-bottom: 0.25rem;
-      }
-
-      .controls-panel__field:last-child {
-        margin-bottom: 0;
-      }
-
-      .controls-panel__field label {
-        flex: 1 1 auto;
-      }
-
-      .controls-panel__field input[type="range"] {
-        flex: 1 1 0;
-      }
-
-      .controls-panel__field input[type="number"] {
-        width: 4.5rem;
-      }
-
-      .controls-panel__field select {
-        max-width: 8rem;
-      }
-
-      .controls-panel__buttons {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
-        margin-top: 0.25rem;
-      }
-
-      .controls-panel__buttons button {
-        border: 1px solid var(--panel-border);
+      .overlay-shortcuts__hotzone {
+        display: block;
+        /* The font of the page, not the one of a button */
+        font: inherit;
+        width: var(--app-u3);
+        height: var(--app-u3);
+        border: none;
         background: transparent;
-        color: inherit;
-        border-radius: 0.25rem;
-        padding: 0.15rem 0.4rem;
-        font-size: 0.7rem;
         cursor: pointer;
+        appearance: none;
       }
 
-      .controls-panel__buttons button:hover {
-        background: rgba(255, 255, 255, 0.06);
+      .overlay-shortcuts__panel {
+        --overlay-panel-from: var(--app-u0);
+
+        inset: auto var(--app-u2) var(--app-u2) auto;
+        max-width: min(
+          var(--overlay-panel-width),
+          calc(100vw - 2 * var(--app-u2))
+        );
+        /* Within the screen, it scrolls */
+        max-height: calc(100dvh - 2 * var(--app-u2));
+        overflow: auto;
       }
 
-      /* Controls visibility toggle */
-      .controls-toggle {
-        position: fixed;
-        top: 1rem;
-        right: 1rem;
-        z-index: 10;
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.25rem;
-        border: 1px solid var(--panel-border);
-        background: var(--panel-bg);
-        color: var(--panel-text);
-        font-size: 0.75rem;
-        cursor: pointer;
+      .overlay-shortcuts__table {
+        width: 100%;
+        border-collapse: collapse;
       }
 
-      .controls-toggle:hover {
-        background: rgba(255, 255, 255, 0.08);
+      .overlay-shortcuts__table td {
+        padding-top: var(--app-u1);
+        vertical-align: baseline;
       }
 
-      .controls-toggle:focus-visible,
-      .controls-panel__buttons button:focus-visible,
-      .controls-panel__field input:focus-visible,
-      .controls-panel__field select:focus-visible {
-        outline: 2px solid currentColor;
-        outline-offset: 2px;
+      .overlay-shortcuts__table tr:first-child td {
+        padding-top: 0;
       }
 
-      overlay-panel:not([open]) .controls-panel {
-        transform: translateX(110%);
-        opacity: 0;
-        pointer-events: none;
+      .overlay-shortcuts__keys {
+        padding-right: var(--app-u2);
+        white-space: nowrap;
+      }
+
+      .overlay-shortcuts__table kbd {
+        font-family: var(--app-font-mono);
+        font-size: var(--app-font-small);
+        padding: calc(1em / var(--app-phi) / var(--app-phi) / var(--app-phi))
+          var(--app-u0);
+        border-radius: var(--app-radius);
+        border: 1px solid var(--app-line);
       }
     </style>
-  </head>
-  <body>
-    <overlay-viewport
-      class="pan-viewport js-pan-viewport"
-      id="panViewport"
-      tabindex="0"
-      role="application"
-      aria-label="Image pan area. Drag to position, or use arrow keys to move."
-    >
-      <div class="pan-inner js-pan-inner" id="panInner">
-        <div class="paper-frame js-paper-frame">
-          <img src="" alt="Overlay" id="overlayImg" class="js-paper-image" />
-          <div class="grid-overlay js-grid-overlay" aria-hidden="true"></div>
-          <div class="center-v js-center-v" aria-hidden="true"></div>
-          <div class="center-h js-center-h" aria-hidden="true"></div>
-        </div>
-      </div>
-    </overlay-viewport>
-
-    <div class="white-overlay" id="whiteOverlay" aria-hidden="true"></div>
-    <overlay-toast
-      class="toast js-toast u-panel u-text-xs"
-      aria-live="polite"
-    ></overlay-toast>
-    <overlay-controls>
-      <overlay-panel id="controlsPanel">
-        <div
-          class="controls-panel js-controls-panel u-panel u-text-xs"
-          aria-label="Overlay controls"
-        >
-          <div class="controls-panel__section">
-            <div class="controls-panel__title">Image</div>
-            <div class="controls-panel__field">
-              <label for="controlImage">Source</label>
-              <select id="controlImage" data-control="image"></select>
-            </div>
-          </div>
-
-          <div class="controls-panel__section">
-            <div class="controls-panel__title">Appearance</div>
-            <div class="controls-panel__field">
-              <label for="controlContrast">Contrast</label>
-              <input
-                id="controlContrast"
-                data-control="contrast"
-                type="range"
-                min="50"
-                max="500"
-                step="1"
-              />
-            </div>
-            <div class="controls-panel__field">
-              <label for="controlBrightness">Brightness</label>
-              <input
-                id="controlBrightness"
-                data-control="brightness"
-                type="range"
-                min="50"
-                max="150"
-                step="1"
-              />
-            </div>
-            <div class="controls-panel__field">
-              <label for="controlGrayscale">Grayscale</label>
-              <input
-                id="controlGrayscale"
-                data-control="grayscale"
-                type="checkbox"
-              />
-            </div>
-            <div class="controls-panel__field">
-              <label for="controlTheme">Theme</label>
-              <select id="controlTheme" data-control="theme">
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="controls-panel__section">
-            <div class="controls-panel__title">Grid & guides</div>
-            <div class="controls-panel__field">
-              <label for="controlGrid">Grid</label>
-              <input id="controlGrid" data-control="grid" type="checkbox" />
-            </div>
-            <div class="controls-panel__field">
-              <label for="controlGuides">Center guides</label>
-              <input id="controlGuides" data-control="guides" type="checkbox" />
-            </div>
-            <div class="controls-panel__field">
-              <label for="controlGridColor">Grid color</label>
-              <input
-                id="controlGridColor"
-                data-control="gridColor"
-                type="color"
-              />
-            </div>
-            <div class="controls-panel__field">
-              <label for="controlGuidesColor">Guides color</label>
-              <input
-                id="controlGuidesColor"
-                data-control="guidesColor"
-                type="color"
-              />
-            </div>
-          </div>
-
-          <div class="controls-panel__section">
-            <div class="controls-panel__title">Paper & screen</div>
-            <div class="controls-panel__field">
-              <label for="controlPaper">Paper size</label>
-              <select id="controlPaper" data-control="paper">
-                <option value="A3">A3</option>
-                <option value="A4">A4</option>
-              </select>
-            </div>
-            <div class="controls-panel__field">
-              <label for="controlOrientation">Orientation</label>
-              <select id="controlOrientation" data-control="orientation">
-                <option value="auto">Auto</option>
-                <option value="landscape">Landscape</option>
-                <option value="portrait">Portrait</option>
-              </select>
-            </div>
-            <div class="controls-panel__field">
-              <label for="controlScreenMm">Screen width (mm)</label>
-              <input
-                id="controlScreenMm"
-                data-control="screenWidthMm"
-                type="number"
-                min="200"
-                max="800"
-                step="1"
-              />
-            </div>
-          </div>
-
-          <div class="controls-panel__section">
-            <div class="controls-panel__title">Actions</div>
-            <div class="controls-panel__buttons">
-              <button type="button" data-action="fullscreen">Fullscreen</button>
-              <button type="button" data-action="whiteScreen">
-                White screen
-              </button>
-              <button type="button" data-action="reset">Reset</button>
-            </div>
-          </div>
-        </div>
-      </overlay-panel>
-
-      <div class="shortcuts-hotzone" aria-hidden="true"></div>
-      <div class="shortcuts-panel u-panel u-text-xs" aria-hidden="true">
-        <div class="shortcuts-panel__title">Keyboard shortcuts</div>
-        <ul class="shortcuts-panel__list">
-          <li class="shortcuts-panel__item">
-            <code>←</code><code>→</code><code>↑</code><code>↓</code> Move image
-          </li>
-          <li class="shortcuts-panel__item">
-            <code>G</code> Grid / <code>C</code> Center guides
-          </li>
-          <li class="shortcuts-panel__item">
-            <code>W</code> White screen / <code>F</code> Fullscreen
-          </li>
-          <li class="shortcuts-panel__item"><code>R</code> Reset settings</li>
-        </ul>
-      </div>
-    </overlay-controls>
-    <overlay-panel-toggle
-      class="controls-toggle u-text-xs"
-      role="button"
-      tabindex="0"
-      aria-label="Toggle controls panel"
-      aria-controls="controlsPanel"
-      aria-expanded="false"
-    >
-      Controls
-    </overlay-panel-toggle>
-
     <script type="application/json" id="overlay-config">
       {
         "imagesDir": "images/",
@@ -603,1311 +392,986 @@
           {
             "name": "Le monde de Kaël",
             "file": "le-monde-de-kael-noir-et-blanc.jpeg"
+          },
+          {
+            "name": "Lamentation, Andrea Solario, c. 1505-1507",
+            "file": "lamentation-andrea-solario-1505-1507.jpg"
           }
         ],
-        "screen": {
-          "widthMm": 302,
-          "heightMm": 302
-        },
-        "paperSizes": {
-          "A3": {
-            "portrait": { "width": 297, "height": 420 },
-            "landscape": { "width": 420, "height": 297 }
-          },
-          "A4": {
-            "portrait": { "width": 210, "height": 297 },
-            "landscape": { "width": 297, "height": 210 }
-          }
-        },
         "defaults": {
-          "paperSize": "A3",
+          "paper": "A3",
           "orientation": "auto",
           "contrast": 140,
           "brightness": 105,
           "grayscale": false,
-          "gridVisible": true,
-          "guidesVisible": true,
+          "grid": true,
+          "gridStep": 1,
+          "guides": true,
           "gridColor": "#000000",
           "guidesColor": "#ff0000",
-          "theme": "dark",
-          "controlsHidden": true
+          "screenWidthMm": 302
         }
       }
     </script>
-
     <script>
-      // DOM helpers (Chrome DevTools-like)
-      const $ = (selector, root = document) => root.querySelector(selector);
-      const $$ = (selector, root = document) =>
-        Array.from(root.querySelectorAll(selector));
+      "use strict";
 
-      class OverlayViewportElement extends HTMLElement {
-        #panInner = null;
-        #dx = 0;
-        #dy = 0;
-        #drag = {
-          startX: 0,
-          startY: 0,
-          startDx: 0,
-          startDy: 0,
-          active: false,
-        };
-        #panRafId = null;
-        #panNeedsUpdate = false;
+      // The store lives on window and is created before the first paint:
+      // the document takes its theme and its white screen from it, without
+      // a flash of the wrong one. The block keeps everything else out of the
+      // global scope.
+      {
+        const STORAGE_KEY = "overlay-store";
+        const SAVE_DEBOUNCE_MS = 400;
 
-        #onMouseDown = event => {
-          if (event.button !== 0) {
-            return;
+        const $root = document.documentElement;
+        const $themeColor = document.querySelector('meta[name="theme-color"]');
+        const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+
+        const config = JSON.parse(
+          document.getElementById("overlay-config").textContent,
+        );
+
+        /** Observable state: the part of @agencecinq/store used here. */
+        class Store {
+          #state;
+          #listeners = new Set();
+
+          constructor(initial) {
+            this.#state = initial;
           }
 
-          event.preventDefault();
-
-          const { x, y } = this.#getClientXY(event);
-
-          this.#startDrag(x, y);
-        };
-
-        #onMouseMove = e => {
-          if (!this.#drag.active) return;
-          e.preventDefault();
-          const { x, y } = this.#getClientXY(e);
-          this.#updateDrag(x, y);
-        };
-
-        #onMouseUp = e => {
-          if (e.button !== 0) {
-            return;
+          get() {
+            return this.#state;
           }
-          this.#endDrag();
-        };
 
-        #onMouseLeave = () => this.#endDrag();
+          /** A function is called with the current state and returns the next one. */
+          set(update) {
+            const previous = this.#state;
+            const next =
+              typeof update === "function" ? update(previous) : update;
 
-        #onTouchStart = e => {
-          const { x, y } = this.#getClientXY(e);
-          this.#startDrag(x, y);
-        };
+            if (Object.is(next, previous)) return;
 
-        #onTouchMove = e => {
-          if (!this.#drag.active) return;
-          e.preventDefault();
-          const { x, y } = this.#getClientXY(e);
-          this.#updateDrag(x, y);
-        };
+            this.#state = next;
+            this.#listeners.forEach(listener => {
+              try {
+                listener(next, previous);
+              } catch (error) {
+                reportError(error);
+              }
+            });
+          }
 
-        #onTouchEnd = () => this.#endDrag();
+          /** Called on every change, not right away. Returns the unsubscribe function. */
+          subscribe(listener) {
+            this.#listeners.add(listener);
 
-        connectedCallback() {
-          this.#panInner = this.querySelector(".js-pan-inner");
-
-          this.addEventListener("mousedown", this.#onMouseDown);
-          this.addEventListener("mousemove", this.#onMouseMove);
-          this.addEventListener("mouseup", this.#onMouseUp);
-          this.addEventListener("mouseleave", this.#onMouseLeave);
-
-          this.addEventListener("touchstart", this.#onTouchStart, {
-            passive: true,
-          });
-          this.addEventListener("touchmove", this.#onTouchMove, {
-            passive: false,
-          });
-          this.addEventListener("touchend", this.#onTouchEnd);
-        }
-
-        disconnectedCallback() {
-          this.removeEventListener("mousedown", this.#onMouseDown);
-          this.removeEventListener("mousemove", this.#onMouseMove);
-          this.removeEventListener("mouseup", this.#onMouseUp);
-          this.removeEventListener("mouseleave", this.#onMouseLeave);
-
-          this.removeEventListener("touchstart", this.#onTouchStart);
-          this.removeEventListener("touchmove", this.#onTouchMove);
-          this.removeEventListener("touchend", this.#onTouchEnd);
-        }
-
-        get panX() {
-          return this.#dx;
-        }
-
-        set panX(value) {
-          let n = typeof value === "number" ? value : 0;
-          if (Number.isNaN(n)) n = 0;
-          this.#dx = n;
-          this.#applyPan();
-        }
-
-        get panY() {
-          return this.#dy;
-        }
-
-        set panY(value) {
-          let n = typeof value === "number" ? value : 0;
-          if (Number.isNaN(n)) n = 0;
-          this.#dy = n;
-          this.#applyPan();
-        }
-
-        resetPan() {
-          this.#dx = 0;
-          this.#dy = 0;
-          this.#applyPan();
-        }
-
-        #applyPan() {
-          if (!this.#panInner) return;
-          this.#panInner.style.transform =
-            "translate(-50%, -50%) translate(" +
-            this.#dx +
-            "px, " +
-            this.#dy +
-            "px)";
-        }
-
-        #schedulePan() {
-          this.#panNeedsUpdate = true;
-          if (this.#panRafId !== null) return;
-          this.#panRafId = requestAnimationFrame(() => {
-            this.#panRafId = null;
-            if (!this.#panNeedsUpdate) return;
-            this.#panNeedsUpdate = false;
-            this.#applyPan();
-          });
-        }
-
-        #getClientXY(event) {
-          if (event.touches && event.touches.length) {
-            return {
-              x: event.touches[0].clientX,
-              y: event.touches[0].clientY,
+            return () => {
+              this.#listeners.delete(listener);
             };
           }
-          return { x: event.clientX, y: event.clientY };
+
+          /**
+           * Called right away with the selected slice, then only when it
+           * changes. Returns the unsubscribe function.
+           */
+          select(selector, listener) {
+            let value = selector(this.#state);
+
+            listener(value);
+
+            return this.subscribe(state => {
+              const next = selector(state);
+
+              if (Object.is(next, value)) return;
+
+              value = next;
+              listener(next);
+            });
+          }
         }
 
-        #startDrag(x, y) {
-          this.#drag.startX = x;
-          this.#drag.startY = y;
-          this.#drag.startDx = this.#dx;
-          this.#drag.startDy = this.#dy;
-          this.#drag.active = true;
-          this.classList.add("dragging");
-        }
+        const oneOf = values => value =>
+          values.includes(value) ? value : undefined;
+        const between = (min, max) => value =>
+          Number.isFinite(value)
+            ? Math.min(max, Math.max(min, Math.round(value)))
+            : undefined;
+        const finite = value => (Number.isFinite(value) ? value : undefined);
+        const boolean = value =>
+          typeof value === "boolean" ? value : undefined;
+        const color = value =>
+          /^#[\da-f]{6}$/i.test(value) ? value : undefined;
 
-        #updateDrag(x, y) {
-          if (!this.#drag.active) return;
-          this.#dx = this.#drag.startDx + (x - this.#drag.startX);
-          this.#dy = this.#drag.startDy + (y - this.#drag.startY);
-          this.#schedulePan();
-        }
+        /** Each option of the page, and what it accepts: anything else is undefined. */
+        const OPTIONS = {
+          image: oneOf(config.images.map(({ file }) => file)),
+          paper: oneOf(["A3", "A4"]),
+          orientation: oneOf(["auto", "landscape", "portrait"]),
+          contrast: between(50, 500),
+          brightness: between(50, 150),
+          grayscale: boolean,
+          grid: boolean,
+          gridStep: between(1, 10),
+          guides: boolean,
+          gridColor: color,
+          guidesColor: color,
+          screenWidthMm: between(50, 3000),
+          panX: finite,
+          panY: finite,
+          locked: boolean,
+          whiteScreen: boolean,
+        };
 
-        #endDrag() {
-          if (!this.#drag.active) return;
-          this.#drag.active = false;
-          this.classList.remove("dragging");
-          this.dispatchEvent(
-            new CustomEvent("overlay-pan-change", {
-              detail: { panX: this.#dx, panY: this.#dy },
-            }),
+        const DEFAULTS = {
+          ...config.defaults,
+          image: config.images[0]?.file,
+          panX: 0,
+          panY: 0,
+          locked: false,
+          whiteScreen: false,
+        };
+
+        /** What localStorage holds, checked: anything else falls back. */
+        function load() {
+          let saved = null;
+          try {
+            saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+          } catch {}
+          const options = Object.fromEntries(
+            Object.entries(OPTIONS).map(([name, accept]) => [
+              name,
+              accept(saved?.[name]) ?? DEFAULTS[name],
+            ]),
           );
+          const theme = ["light", "dark"].includes(saved?.theme)
+            ? saved.theme
+            : null;
+          return {
+            ...options,
+            // The theme shown, and whether it was chosen over the system one.
+            theme: theme ?? (darkQuery.matches ? "dark" : "light"),
+            themeChosen: theme !== null,
+          };
         }
-      }
-      customElements.define("overlay-viewport", OverlayViewportElement);
 
-      class ToastElement extends HTMLElement {
-        #hideTimeout = null;
+        /** The page state. Every brick reads and writes it, none knows the others. */
+        class OverlayStore extends Store {
+          #saveTimeout = null;
+          #pending = false;
 
-        show(message, duration) {
-          if (typeof message === "string" && message.length) {
-            this.textContent = message;
-          } else if (!this.textContent) {
-            this.textContent = "Saved";
+          constructor() {
+            super(load());
+
+            darkQuery.addEventListener("change", ({ matches }) => {
+              this.set(state =>
+                state.themeChosen
+                  ? state
+                  : { ...state, theme: matches ? "dark" : "light" },
+              );
+            });
+
+            // Never lose the last change when the tab is closed or hidden.
+            addEventListener("pagehide", () => this.#write());
+            document.addEventListener("visibilitychange", () => {
+              if (document.visibilityState === "hidden") this.#write();
+            });
+
+            // Another tab saved: follow it, unless this one has changes of
+            // its own waiting to be saved.
+            addEventListener("storage", ({ key }) => {
+              if (key !== STORAGE_KEY || this.#pending) return;
+              this.set(state => ({ ...state, ...load() }));
+            });
           }
 
-          this.classList.add("is-visible");
-          clearTimeout(this.#hideTimeout);
-          const time = typeof duration === "number" ? duration : 900;
-          this.#hideTimeout = setTimeout(() => {
-            this.classList.remove("is-visible");
-          }, time);
-        }
-      }
-      customElements.define("overlay-toast", ToastElement);
+          get images() {
+            return config.images;
+          }
 
-      class OverlayControlsElement extends HTMLElement {}
-      customElements.define("overlay-controls", OverlayControlsElement);
+          get imagesDir() {
+            return config.imagesDir;
+          }
 
-      class PanelElement extends HTMLElement {
-        static get observedAttributes() {
-          return ["open"];
-        }
+          /** A value the option does not accept is ignored; a number is kept within its bounds. */
+          setOption(name, value) {
+            const accepted = OPTIONS[name]?.(value);
 
-        attributeChangedCallback(name, oldVal, newVal) {
-          if (name === "open") {
-            this.dispatchEvent(
-              new CustomEvent("panel:change", {
-                detail: { open: this.hasAttribute("open") },
-                bubbles: true,
-              }),
+            if (accepted === undefined) return;
+
+            this.#change({ [name]: accepted });
+          }
+
+          toggle(name) {
+            this.setOption(name, !this.get()[name]);
+          }
+
+          /** Locked, the sheet stays where it is: neither dragged nor moved by the keys. */
+          setPan(panX, panY) {
+            if (this.get().locked) return;
+
+            this.#change({ panX, panY });
+          }
+
+          movePan(dx, dy) {
+            const { panX, panY } = this.get();
+
+            this.setPan(panX + dx, panY + dy);
+          }
+
+          toggleTheme() {
+            const theme = this.get().theme === "dark" ? "light" : "dark";
+
+            this.#change({ theme, themeChosen: true });
+          }
+
+          /** Every option back to its default, but the image and the theme. */
+          reset() {
+            this.#change({ ...DEFAULTS, image: this.get().image });
+          }
+
+          #write() {
+            clearTimeout(this.#saveTimeout);
+            if (!this.#pending) return;
+            const { theme, themeChosen, ...options } = this.get();
+            try {
+              localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({
+                  ...options,
+                  theme: themeChosen ? theme : null,
+                }),
+              );
+            } catch {
+              return;
+            }
+            this.#pending = false;
+          }
+
+          #change(patch) {
+            const state = this.get();
+            if (Object.keys(patch).every(key => state[key] === patch[key])) {
+              return;
+            }
+            this.set({ ...state, ...patch });
+            this.#pending = true;
+            clearTimeout(this.#saveTimeout);
+            this.#saveTimeout = setTimeout(
+              () => this.#write(),
+              SAVE_DEBOUNCE_MS,
             );
           }
         }
 
-        get open() {
-          return this.hasAttribute("open");
-        }
+        const store = new OverlayStore();
+
+        // The document follows the store: CSS reads these attributes.
+        store.select(
+          state => state.theme,
+          theme => {
+            $root.dataset.theme = theme;
+            $themeColor.content = getComputedStyle($root).backgroundColor;
+          },
+        );
+        store.select(
+          state => state.whiteScreen,
+          whiteScreen => {
+            $root.toggleAttribute("data-white-screen", whiteScreen);
+          },
+        );
+
+        window.store = store;
       }
-      customElements.define("overlay-panel", PanelElement);
+    </script>
+  </head>
+  <body>
+    <!-- Not focusable: the arrows move the sheet from anywhere on the page -->
+    <overlay-viewport>
+      <overlay-sheet>
+        <img alt="" draggable="false" />
+        <div class="overlay-sheet__grid" aria-hidden="true"></div>
+        <div class="overlay-sheet__guides" aria-hidden="true"></div>
+      </overlay-sheet>
+    </overlay-viewport>
 
-      class PanelButtonElement extends HTMLElement {
-        #onClick = () => this.#handleClick();
+    <div class="overlay-white-screen" aria-hidden="true"></div>
 
-        #onKeyDown = e => this.#handleKeyDown(e);
+    <div class="overlay-pills">
+      <overlay-field>
+        <label class="app-pill">
+          <span class="sr-only">Image</span>
+          <select name="image">
+            <button>
+              <strong aria-hidden="true">Image</strong>
+              <selectedcontent></selectedcontent>
+            </button>
+          </select>
+        </label>
+      </overlay-field>
+      <overlay-field>
+        <label class="app-pill">
+          <span class="sr-only">Format</span>
+          <select name="paper">
+            <button>
+              <strong aria-hidden="true">Format</strong>
+              <selectedcontent></selectedcontent>
+            </button>
+            <option value="A3">A3</option>
+            <option value="A4">A4</option>
+          </select>
+        </label>
+      </overlay-field>
+      <overlay-field>
+        <label class="app-pill">
+          <span class="sr-only">Orientation</span>
+          <select name="orientation">
+            <button>
+              <strong aria-hidden="true">Orientation</strong>
+              <selectedcontent></selectedcontent>
+            </button>
+            <option value="auto">Auto</option>
+            <option value="landscape">Paysage</option>
+            <option value="portrait">Portrait</option>
+          </select>
+        </label>
+      </overlay-field>
+    </div>
 
-        #panels = [];
-        #onPanelChange;
+    <div class="app-toolbar">
+      <button
+        class="app-control"
+        type="button"
+        popovertarget="overlay-settings"
+        aria-label="Réglages"
+        title="Réglages"
+      >
+        ⚙&#xFE0E;
+      </button>
+      <overlay-toggle name="grid">
+        <button
+          class="app-control"
+          type="button"
+          aria-label="Grille (G)"
+          title="Grille (G)"
+        >
+          #
+        </button>
+      </overlay-toggle>
+      <overlay-toggle name="guides">
+        <button
+          class="app-control"
+          type="button"
+          aria-label="Repères au centre (C)"
+          title="Repères au centre (C)"
+        >
+          +
+        </button>
+      </overlay-toggle>
+      <overlay-toggle name="locked">
+        <button
+          class="app-control"
+          type="button"
+          aria-label="Verrouiller la position (L)"
+          title="Verrouiller la position (L)"
+        >
+          ⚿&#xFE0E;
+        </button>
+      </overlay-toggle>
+      <overlay-toggle name="whiteScreen">
+        <button
+          class="app-control"
+          type="button"
+          aria-label="Écran blanc (W)"
+          title="Écran blanc (W)"
+        >
+          □&#xFE0E;
+        </button>
+      </overlay-toggle>
+      <overlay-fullscreen-toggle>
+        <button
+          class="app-control"
+          type="button"
+          aria-label="Plein écran (F)"
+          title="Plein écran (F)"
+        >
+          ⤢&#xFE0E;
+        </button>
+      </overlay-fullscreen-toggle>
+      <overlay-theme-toggle>
+        <button
+          class="app-control"
+          type="button"
+          aria-label="Thème sombre"
+          title="Thème clair/sombre"
+        ></button>
+      </overlay-theme-toggle>
+    </div>
+
+    <div
+      class="overlay-panel overlay-settings"
+      id="overlay-settings"
+      popover
+    >
+      <h2 class="overlay-panel__title app-meta">Réglages</h2>
+      <div class="overlay-settings__fields">
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Contraste</span>
+            <input type="range" name="contrast" min="50" max="500" step="1" />
+            <span><output></output> %</span>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Luminosité</span>
+            <input
+              type="range"
+              name="brightness"
+              min="50"
+              max="150"
+              step="1"
+            />
+            <span><output></output> %</span>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Niveaux de gris</span>
+            <input type="checkbox" name="grayscale" />
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Pas de la grille</span>
+            <input
+              class="app-field"
+              type="number"
+              name="gridStep"
+              min="1"
+              max="10"
+              step="1"
+            />
+            <span>cm</span>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Couleur de la grille</span>
+            <input type="color" name="gridColor" />
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Couleur des repères</span>
+            <input type="color" name="guidesColor" />
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Largeur de l’écran</span>
+            <input
+              class="app-field"
+              type="number"
+              name="screenWidthMm"
+              min="50"
+              max="3000"
+              step="1"
+            />
+            <span>mm</span>
+          </label>
+        </overlay-field>
+      </div>
+      <overlay-reset>
+        <button class="app-pill" type="button">Réinitialiser (R)</button>
+      </overlay-reset>
+    </div>
+
+    <overlay-shortcuts>
+      <button
+        type="button"
+        class="overlay-shortcuts__hotzone"
+        aria-label="Raccourcis clavier"
+        popovertarget="overlay-shortcuts-panel"
+        popovertargetaction="show"
+      ></button>
+      <div
+        class="overlay-panel overlay-shortcuts__panel"
+        id="overlay-shortcuts-panel"
+        popover
+      >
+        <h2 class="overlay-panel__title app-meta">Raccourcis</h2>
+        <table class="overlay-shortcuts__table">
+          <caption class="sr-only">
+            Liste des raccourcis clavier
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col" class="sr-only">Raccourci</th>
+              <th scope="col" class="sr-only">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="overlay-shortcuts__keys">
+                <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd>
+              </td>
+              <td>Déplacer l’image</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>G</kbd></td>
+              <td>Grille</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>C</kbd></td>
+              <td>Repères au centre</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>L</kbd></td>
+              <td>Verrouiller la position</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>W</kbd></td>
+              <td>Écran blanc</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>F</kbd></td>
+              <td>Plein écran</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>R</kbd></td>
+              <td>Réinitialiser les réglages</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys">
+                <kbd class="js-overlay-mod">Ctrl</kbd> + <kbd>K</kbd>
+              </td>
+              <td>Thème clair/sombre</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </overlay-shortcuts>
+
+    <script type="module">
+      const { store } = window;
+
+      const PAN_STEP_PX = 10;
+      const SHORTCUTS_HIDE_DELAY_MS = 150;
+
+      const isMac = /mac|iphone|ipad/i.test(
+        navigator.userAgentData?.platform ?? navigator.platform,
+      );
+
+      function toggleFullscreen() {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen();
+      }
+
+      /** The value of a form control, as the store holds it. */
+      function getControlValue($control) {
+        if ($control.type === "checkbox") return $control.checked;
+        if ($control.type === "range" || $control.type === "number") {
+          return $control.valueAsNumber;
+        }
+        return $control.value;
+      }
+
+      /** Drags the sheet: the pan is a custom property its child reads. */
+      class OverlayViewportElement extends HTMLElement {
+        #controller = null;
+        #internals = this.attachInternals();
+        // Where the drag started, less the pan then.
+        #origin = null;
 
         connectedCallback() {
-          this.addEventListener("click", this.#onClick);
-          this.addEventListener("keydown", this.#onKeyDown);
-          if (!this.hasAttribute("role")) this.setAttribute("role", "button");
-          if (!this.hasAttribute("tabindex"))
-            this.setAttribute("tabindex", "0");
-          this.#syncFromPanels();
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+
+          this.addEventListener(
+            "pointerdown",
+            event => {
+              if (event.button !== 0) return;
+              const { panX, panY } = store.get();
+              this.#origin = {
+                x: event.clientX - panX,
+                y: event.clientY - panY,
+              };
+              this.setPointerCapture(event.pointerId);
+              this.#internals.states.add("dragging");
+            },
+            { signal },
+          );
+          this.addEventListener(
+            "pointermove",
+            event => {
+              if (!this.#origin) return;
+              store.setPan(
+                event.clientX - this.#origin.x,
+                event.clientY - this.#origin.y,
+              );
+            },
+            { signal },
+          );
+          // Released or cancelled, the pointer leaves the drag.
+          this.addEventListener(
+            "lostpointercapture",
+            () => {
+              this.#origin = null;
+              this.#internals.states.delete("dragging");
+            },
+            { signal },
+          );
+          signal.addEventListener(
+            "abort",
+            store.select(
+              state => state.locked,
+              locked => {
+                if (locked) this.#internals.states.add("locked");
+                else this.#internals.states.delete("locked");
+              },
+            ),
+          );
+
+          for (const axis of ["X", "Y"]) {
+            signal.addEventListener(
+              "abort",
+              store.select(
+                state => state[`pan${axis}`],
+                pan => {
+                  this.style.setProperty(
+                    `--overlay-pan-${axis.toLowerCase()}`,
+                    `${pan}px`,
+                  );
+                },
+              ),
+            );
+          }
         }
 
         disconnectedCallback() {
-          if (this.#onClick) {
-            this.removeEventListener("click", this.#onClick);
-          }
-          if (this.#onKeyDown) {
-            this.removeEventListener("keydown", this.#onKeyDown);
-          }
-          if (this.#panels && this.#onPanelChange) {
-            this.#panels.forEach(panel => {
-              panel.removeEventListener("panel:change", this.#onPanelChange);
-            });
-          }
-        }
-
-        #getPanels() {
-          const id = this.getAttribute("aria-controls");
-          if (!id) return [];
-          const ids = id.split(/\s+/).filter(Boolean);
-          return ids.map(singleId => $(`#${singleId}`)).filter(Boolean);
-        }
-
-        #syncFromPanels() {
-          this.#panels = this.#getPanels();
-          if (!this.#panels.length) return;
-
-          const isOpen = this.#panels.some(panel => !!panel.open);
-          this.setAttribute("aria-expanded", isOpen ? "true" : "false");
-
-          this.#onPanelChange =
-            this.#onPanelChange ||
-            (event => {
-              const open =
-                event && event.detail && typeof event.detail.open === "boolean"
-                  ? event.detail.open
-                  : this.#panels.some(panel => !!panel.open);
-              this.setAttribute("aria-expanded", open ? "true" : "false");
-            });
-
-          this.#panels.forEach(panel => {
-            panel.addEventListener("panel:change", this.#onPanelChange);
-          });
-        }
-
-        #handleClick() {
-          const panels = this.#getPanels();
-          if (!panels.length) return;
-          const anyOpen = panels.some(panel => !!panel.open);
-          const nextOpen = !anyOpen;
-          panels.forEach(panel => {
-            if (nextOpen) {
-              panel.setAttribute("open", "");
-            } else {
-              panel.removeAttribute("open");
-            }
-          });
-          this.setAttribute("aria-expanded", nextOpen ? "true" : "false");
-        }
-
-        #handleKeyDown(e) {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          this.#handleClick();
+          this.#controller?.abort();
         }
       }
-      customElements.define("overlay-panel-toggle", PanelButtonElement);
+      customElements.define("overlay-viewport", OverlayViewportElement);
 
-      const AppStore = (function () {
-        function create(options) {
-          const storageKey = options.key;
-          const getState = options.getState;
-          const onAfterSave = options.onAfterSave || function () {};
+      /** The image on the paper, its filters, the grid and the guides. */
+      class OverlaySheetElement extends HTMLElement {
+        #controller = null;
 
-          function read() {
-            try {
-              const raw = localStorage.getItem(storageKey);
-              return raw ? JSON.parse(raw) : null;
-            } catch (e) {
-              return null;
-            }
-          }
+        connectedCallback() {
+          const $image = this.querySelector("img");
+          const $grid = this.querySelector(".overlay-sheet__grid");
+          const $guides = this.querySelector(".overlay-sheet__guides");
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
 
-          function write(snapshot) {
-            try {
-              localStorage.setItem(storageKey, JSON.stringify(snapshot));
-            } catch (e) {}
-          }
-
-          return {
-            read,
-            save: function () {
-              write(getState());
-              onAfterSave();
+          const renders = {
+            image: file => {
+              const image = store.images.find(item => item.file === file);
+              $image.src = store.imagesDir + file;
+              $image.alt = image.name;
+            },
+            paper: paper => {
+              this.dataset.paper = paper;
+            },
+            orientation: orientation => {
+              this.dataset.orientation = orientation;
+            },
+            screenWidthMm: screenWidthMm => {
+              this.style.setProperty(
+                "--overlay-screen-width",
+                screenWidthMm.toString(),
+              );
+            },
+            contrast: contrast => {
+              this.style.setProperty("--overlay-contrast", contrast.toString());
+            },
+            brightness: brightness => {
+              this.style.setProperty(
+                "--overlay-brightness",
+                brightness.toString(),
+              );
+            },
+            grayscale: grayscale => {
+              this.toggleAttribute("data-grayscale", grayscale);
+            },
+            grid: grid => {
+              $grid.hidden = !grid;
+            },
+            gridStep: gridStep => {
+              this.style.setProperty("--overlay-grid-cm", gridStep.toString());
+            },
+            guides: guides => {
+              $guides.hidden = !guides;
+            },
+            gridColor: gridColor => {
+              this.style.setProperty("--overlay-grid-color", gridColor);
+            },
+            guidesColor: guidesColor => {
+              this.style.setProperty("--overlay-guides-color", guidesColor);
             },
           };
+
+          for (const [name, render] of Object.entries(renders)) {
+            signal.addEventListener(
+              "abort",
+              store.select(state => state[name], render),
+            );
+          }
         }
 
-        return { create };
-      })();
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define("overlay-sheet", OverlaySheetElement);
 
-      const OverlayConfig = (function () {
-        // Centralized application configuration
-        let CONFIG;
-        try {
-          const configElement = $("#overlay-config");
-          if (configElement?.textContent) {
-            CONFIG = JSON.parse(configElement.textContent);
-          } else {
-            CONFIG = {
-              imagesDir: "images/",
-              images: [],
-              screen: { widthMm: 302, heightMm: 302 },
-              paperSizes: {},
-              defaults: {
-                paperSize: "A3",
-                orientation: "auto",
-                contrast: 140,
-                brightness: 105,
-                grayscale: false,
-                gridVisible: true,
-                guidesVisible: true,
-                gridColor: "#000000",
-                guidesColor: "#ff0000",
-                theme: "dark",
-                controlsHidden: true,
-              },
-            };
-          }
-        } catch (e) {
-          CONFIG = {
-            imagesDir: "images/",
-            images: [],
-            screen: { widthMm: 302, heightMm: 302 },
-            paperSizes: {},
-            defaults: {
-              paperSize: "A3",
-              orientation: "auto",
-              contrast: 140,
-              brightness: 105,
-              grayscale: false,
-              gridVisible: true,
-              guidesVisible: true,
-              gridColor: "#000000",
-              guidesColor: "#ff0000",
-              theme: "dark",
-              controlsHidden: true,
+      /** Shows an option of the store in the form control it holds, named after it, and changes it. */
+      class OverlayFieldElement extends HTMLElement {
+        #controller = null;
+
+        connectedCallback() {
+          const $control = this.querySelector("input, select");
+          const $output = this.querySelector("output");
+          const { name } = $control;
+          // A number typed applies once confirmed, not at each digit.
+          const eventType = $control.type === "number" ? "change" : "input";
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+
+          const render = value => {
+            if ($control.type === "checkbox") $control.checked = value;
+            else $control.value = value;
+            if ($output) $output.value = value;
+          };
+
+          $control.addEventListener(
+            eventType,
+            () => {
+              store.setOption(name, getControlValue($control));
+              // The store may keep its value, such as a width out of its
+              // bounds: the control shows it again.
+              render(store.get()[name]);
             },
-          };
-        }
-
-        // Helpers
-        const clamp = (value, min, max) => {
-          if (isNaN(value)) return min;
-          return Math.min(max, Math.max(min, value));
-        };
-
-        const toInt = (value, fallback) => {
-          const n = parseInt(value, 10);
-          return isNaN(n) ? fallback : n;
-        };
-
-        const isPortraitMode = orientationValue => {
-          const mode = orientationValue;
-          if (mode === "portrait") return true;
-          if (mode === "landscape") return false;
-          return window.matchMedia("(orientation: portrait)").matches;
-        };
-
-        const getPaperSizeMm = (paperSizes, paperKey, isPortrait) => {
-          const sizeDef = paperSizes[paperKey] || paperSizes.A3;
-          const orientationKey = isPortrait ? "portrait" : "landscape";
-          return sizeDef[orientationKey];
-        };
-
-        const getPxPerMm = screenWidthMmValue =>
-          window.innerWidth / screenWidthMmValue;
-
-        const getGridStepPx = pxPerMm => 10 * pxPerMm; // 10 mm = 1 cm
-
-        const applyFrameSize = ($frame, widthMm, heightMm, pxPerMm) => {
-          $frame.style.width = widthMm * pxPerMm + "px";
-          $frame.style.height = heightMm * pxPerMm + "px";
-        };
-
-        const applyGridSize = ($overlay, stepPx) => {
-          if (!$overlay) return;
-          $overlay.style.backgroundSize =
-            stepPx + "px 100%, 100% " + stepPx + "px";
-        };
-
-        const buildFilterString = (
-          contrastValuePercent,
-          brightnessValuePercent,
-          isGrayscale,
-        ) => {
-          const c = contrastValuePercent / 100;
-          const b = brightnessValuePercent / 100;
-          const parts = ["contrast(" + c + ")", "brightness(" + b + ")"];
-          if (isGrayscale) parts.unshift("saturate(0)");
-          return parts.join(" ");
-        };
-
-        const hexToRgba = (hex, alphaFallback) => {
-          const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-          if (!m) return alphaFallback;
-          const r = parseInt(m[1], 16);
-          const g = parseInt(m[2], 16);
-          const b = parseInt(m[3], 16);
-          return "rgba(" + r + ", " + g + ", " + b + ", " + alphaFallback + ")";
-        };
-
-        const setGridColorVar = gridColor => {
-          document.documentElement.style.setProperty(
-            "--grid-color",
-            hexToRgba(gridColor, 0.25),
+            { signal },
           );
-        };
-
-        const setGuidesColorVar = guidesColor => {
-          document.documentElement.style.setProperty(
-            "--guides-color",
-            hexToRgba(guidesColor, 0.5),
-          );
-        };
-
-        return {
-          CONFIG,
-          clamp,
-          toInt,
-          isPortraitMode,
-          getPaperSizeMm,
-          getPxPerMm,
-          getGridStepPx,
-          applyFrameSize,
-          applyGridSize,
-          buildFilterString,
-          setGridColorVar,
-          setGuidesColorVar,
-        };
-      })();
-
-      (function () {
-        const CONFIG = OverlayConfig.CONFIG;
-        const clamp = OverlayConfig.clamp;
-        const toInt = OverlayConfig.toInt;
-        const isPortraitMode = OverlayConfig.isPortraitMode;
-        const getPaperSizeMm = OverlayConfig.getPaperSizeMm;
-        const getPxPerMm = OverlayConfig.getPxPerMm;
-        const getGridStepPx = OverlayConfig.getGridStepPx;
-        const applyFrameSize = OverlayConfig.applyFrameSize;
-        const applyGridSize = OverlayConfig.applyGridSize;
-        const buildFilterString = OverlayConfig.buildFilterString;
-        const setGridColorVar = OverlayConfig.setGridColorVar;
-        const setGuidesColorVar = OverlayConfig.setGuidesColorVar;
-
-        // Main state
-        const IMAGES = CONFIG.images;
-        const IMAGES_DIR = CONFIG.imagesDir;
-
-        let screenWidthMm = CONFIG.screen.widthMm;
-
-        const $img = $(".js-paper-image");
-        const $paperFrame = $(".js-paper-frame");
-        const $gridOverlay = $(".js-grid-overlay");
-        const $centerV = $(".js-center-v");
-        const $centerH = $(".js-center-h");
-        const $panViewport = $("overlay-viewport");
-        const $panInner = $(".js-pan-inner");
-        const $whiteOverlay = $("#whiteOverlay");
-        const $toast = $("overlay-toast.js-toast");
-        const $overlayPanel = $("overlay-panel");
-        const $controlsPanel = $(".js-controls-panel");
-
-        let orientationSelectValue = CONFIG.defaults.orientation;
-        let paperSize = CONFIG.defaults.paperSize; // "A3" or "A4"
-        let theme = CONFIG.defaults.theme ?? "dark";
-
-        // Filter and grid state (before restore so saved values can overwrite)
-        let contrastValue = CONFIG.defaults.contrast;
-        let brightnessValue = CONFIG.defaults.brightness;
-        let grayscaleEnabled = CONFIG.defaults.grayscale;
-        let gridVisible = CONFIG.defaults.gridVisible;
-        let guidesVisible = CONFIG.defaults.guidesVisible;
-        let gridColor = CONFIG.defaults.gridColor;
-        let guidesColor = CONFIG.defaults.guidesColor;
-
-        function applyTheme() {
-          document.documentElement.setAttribute("data-theme", theme);
-        }
-
-        // Central place to compute default state (used by reset)
-        function applyDefaultState() {
-          orientationSelectValue = CONFIG.defaults.orientation;
-          paperSize = CONFIG.defaults.paperSize;
-          contrastValue = CONFIG.defaults.contrast;
-          brightnessValue = CONFIG.defaults.brightness;
-          grayscaleEnabled = CONFIG.defaults.grayscale;
-          gridVisible = CONFIG.defaults.gridVisible;
-          guidesVisible = CONFIG.defaults.guidesVisible;
-          gridColor = CONFIG.defaults.gridColor;
-          guidesColor = CONFIG.defaults.guidesColor;
-          screenWidthMm = CONFIG.screen.widthMm;
-          theme = CONFIG.defaults.theme ?? "dark";
-
-          if ($panViewport && $panViewport.resetPan) $panViewport.resetPan();
-        }
-
-        // Instance of OverlayStore for this app
-        const store = AppStore.create({
-          key: "overlay-store",
-          getState() {
-            return {
-              image: $img?.dataset.file ?? IMAGES[0]?.file ?? "",
-              panX:
-                typeof $panViewport?.panX === "number" ? $panViewport.panX : 0,
-              panY:
-                typeof $panViewport?.panY === "number" ? $panViewport.panY : 0,
-              contrast: contrastValue,
-              brightness: brightnessValue,
-              grayscale: grayscaleEnabled,
-              grid: gridVisible,
-              guides: guidesVisible,
-              gridColor: gridColor,
-              guidesColor: guidesColor,
-              orientation: orientationSelectValue,
-              paper: paperSize,
-              screenWidthMm: screenWidthMm,
-              whiteScreen:
-                $whiteOverlay?.classList.contains("visible") ?? false,
-              theme: theme,
-              controlsHidden:
-                !$overlayPanel?.open ?? !!CONFIG.defaults.controlsHidden,
-            };
-          },
-          onAfterSave() {
-            if (typeof $toast?.show === "function") {
-              $toast.show("Saved");
-            }
-          },
-        });
-
-        function setImageSize() {
-          const portrait = isPortraitMode(orientationSelectValue);
-          $paperFrame.classList.remove("landscape", "portrait");
-          $paperFrame.classList.add(portrait ? "portrait" : "landscape");
-          $img.style.width = "";
-          $img.style.height = "";
-
-          const pxPerMm = getPxPerMm(screenWidthMm);
-          const size = getPaperSizeMm(CONFIG.paperSizes, paperSize, portrait);
-
-          applyFrameSize($paperFrame, size.width, size.height, pxPerMm);
-          applyGridSize($gridOverlay, getGridStepPx(pxPerMm));
-        }
-
-        function selectImage(filename) {
-          $img.src = IMAGES_DIR + filename;
-          $img.dataset.file = filename;
-        }
-
-        // Restore state from localStorage
-        const saved = store.read();
-        if (saved) {
-          orientationSelectValue =
-            saved.orientation ?? CONFIG.defaults.orientation;
-          paperSize = saved.paper ?? CONFIG.defaults.paperSize;
-          contrastValue = clamp(
-            toInt(saved.contrast, CONFIG.defaults.contrast),
-            50,
-            500,
-          );
-          brightnessValue = clamp(
-            toInt(saved.brightness, CONFIG.defaults.brightness),
-            50,
-            150,
-          );
-          grayscaleEnabled = !!saved.grayscale;
-          gridVisible = !!saved.grid;
-          guidesVisible = !!saved.guides;
-          gridColor =
-            typeof saved.gridColor === "string"
-              ? saved.gridColor
-              : CONFIG.defaults.gridColor;
-          guidesColor =
-            typeof saved.guidesColor === "string"
-              ? saved.guidesColor
-              : CONFIG.defaults.guidesColor;
-          screenWidthMm = clamp(
-            toInt(saved.screenWidthMm, CONFIG.screen.widthMm),
-            50,
-            3000,
-          );
-          theme = saved.theme ?? CONFIG.defaults.theme ?? "dark";
-          if ($panViewport) {
-            if (typeof saved.panX === "number") $panViewport.panX = saved.panX;
-            if (typeof saved.panY === "number") $panViewport.panY = saved.panY;
-          }
-        }
-        setImageSize();
-        applyTheme();
-
-        // Apply initial controls visibility from saved state
-        if ($overlayPanel) {
-          const initialControlsHidden =
-            saved && typeof saved.controlsHidden === "boolean"
-              ? saved.controlsHidden
-              : !!CONFIG.defaults.controlsHidden;
-          if (initialControlsHidden) {
-            $overlayPanel.removeAttribute("open");
-          } else {
-            $overlayPanel.setAttribute("open", "");
-          }
-        }
-        let initialFile = IMAGES.length ? IMAGES[0].file : "";
-        if (
-          saved &&
-          saved.image &&
-          IMAGES.some(item => item.file === saved.image)
-        ) {
-          initialFile = saved.image;
-        }
-        if (IMAGES.length) selectImage(initialFile);
-        updateFilter();
-        updateGridVisibility();
-        updateGuidesVisibility();
-        updateGridColor();
-        updateGuidesColor();
-        if (saved && saved.whiteScreen && $whiteOverlay)
-          $whiteOverlay.classList.add("visible");
-
-        window.addEventListener("resize", setImageSize);
-        if (window.matchMedia) {
-          window
-            .matchMedia("(orientation: portrait)")
-            .addEventListener("change", function () {
-              if (orientationSelectValue === "auto") setImageSize();
-            });
-        }
-
-        function updateFilter() {
-          $img.style.filter = buildFilterString(
-            contrastValue,
-            brightnessValue,
-            grayscaleEnabled,
+          signal.addEventListener(
+            "abort",
+            store.select(state => state[name], render),
           );
         }
 
-        updateFilter();
-
-        function updateGridVisibility() {
-          if ($gridOverlay)
-            $gridOverlay.style.display = gridVisible ? "" : "none";
+        disconnectedCallback() {
+          this.#controller?.abort();
         }
+      }
 
-        function updateGuidesVisibility() {
-          const displayValue = guidesVisible ? "" : "none";
-          if ($centerV) $centerV.style.display = displayValue;
-          if ($centerH) $centerH.style.display = displayValue;
-        }
+      // The images are options of the select before the field shows the
+      // current one.
+      const $imageSelect = document.querySelector('select[name="image"]');
+      for (const { name, file } of store.images) {
+        $imageSelect.append(new Option(name, file));
+      }
+      customElements.define("overlay-field", OverlayFieldElement);
 
-        function updateGridColor() {
-          setGridColorVar(gridColor);
-        }
+      /** A button that switches on and off the option of the store its name gives. */
+      class OverlayToggleElement extends HTMLElement {
+        #controller = null;
 
-        function updateGuidesColor() {
-          setGuidesColorVar(guidesColor);
-        }
-
-        updateGridVisibility();
-        updateGuidesVisibility();
-        updateGridColor();
-        updateGuidesColor();
-        // Simple helper to reset all controls to defaults, keeping current image
-        function resetAllState() {
-          applyDefaultState();
-          setImageSize();
-          if ($panViewport && $panViewport.resetPan) $panViewport.resetPan();
-          updateFilter();
-          updateGridVisibility();
-          updateGuidesVisibility();
-          updateGridColor();
-          updateGuidesColor();
-          if ($whiteOverlay) $whiteOverlay.classList.remove("visible");
-        }
-
-        if ($panViewport) {
-          const handlePanChange = () => {
-            store.save();
-          };
-          $panViewport.addEventListener("overlay-pan-change", handlePanChange);
-        }
-
-        // Wire up controls panel
-        if ($controlsPanel) {
-          // Field controls
-          const $controlImage = $controlsPanel.querySelector(
-            '[data-control="image"]',
-          );
-          const $controlContrast = $controlsPanel.querySelector(
-            '[data-control="contrast"]',
-          );
-          const $controlBrightness = $controlsPanel.querySelector(
-            '[data-control="brightness"]',
-          );
-          const $controlGrayscale = $controlsPanel.querySelector(
-            '[data-control="grayscale"]',
-          );
-          const $controlTheme = $controlsPanel.querySelector(
-            '[data-control="theme"]',
-          );
-          const $controlGrid = $controlsPanel.querySelector(
-            '[data-control="grid"]',
-          );
-          const $controlGuides = $controlsPanel.querySelector(
-            '[data-control="guides"]',
-          );
-          const $controlGridColor = $controlsPanel.querySelector(
-            '[data-control="gridColor"]',
-          );
-          const $controlGuidesColor = $controlsPanel.querySelector(
-            '[data-control="guidesColor"]',
-          );
-          const $controlPaper = $controlsPanel.querySelector(
-            '[data-control="paper"]',
-          );
-          const $controlOrientation = $controlsPanel.querySelector(
-            '[data-control="orientation"]',
-          );
-          const $controlScreenMm = $controlsPanel.querySelector(
-            '[data-control="screenWidthMm"]',
-          );
-
-          // Action buttons
-          const $btnFullscreen = $controlsPanel.querySelector(
-            '[data-action="fullscreen"]',
-          );
-          const $btnWhiteScreen = $controlsPanel.querySelector(
-            '[data-action="whiteScreen"]',
-          );
-          const $btnReset = $controlsPanel.querySelector(
-            '[data-action="reset"]',
-          );
-
-          // Populate image select
-          if ($controlImage && IMAGES.length) {
-            IMAGES.forEach(img => {
-              const opt = document.createElement("option");
-              opt.value = img.file;
-              opt.textContent = img.name || img.file;
-              $controlImage.appendChild(opt);
-            });
-            $controlImage.value = initialFile;
-            $controlImage.addEventListener("change", event => {
-              const file = event.target.value;
-              if (!file) return;
-              selectImage(file);
-              if ($panViewport && $panViewport.resetPan)
-                $panViewport.resetPan();
-              store.save();
-            });
-          }
-
-          // Initialize values
-          if ($controlContrast) $controlContrast.value = contrastValue;
-          if ($controlBrightness) $controlBrightness.value = brightnessValue;
-          if ($controlGrayscale) $controlGrayscale.checked = !!grayscaleEnabled;
-          if ($controlTheme) $controlTheme.value = theme;
-          if ($controlGrid) $controlGrid.checked = !!gridVisible;
-          if ($controlGuides) $controlGuides.checked = !!guidesVisible;
-          if ($controlGridColor) $controlGridColor.value = gridColor;
-          if ($controlGuidesColor) $controlGuidesColor.value = guidesColor;
-          if ($controlPaper) $controlPaper.value = paperSize;
-          if ($controlOrientation)
-            $controlOrientation.value = orientationSelectValue;
-          if ($controlScreenMm) $controlScreenMm.value = screenWidthMm;
-
-          // Handlers
-          if ($controlContrast) {
-            $controlContrast.addEventListener("input", e => {
-              contrastValue = clamp(
-                toInt(e.target.value, contrastValue),
-                50,
-                500,
-              );
-              updateFilter();
-              store.save();
-            });
-          }
-
-          if ($controlBrightness) {
-            $controlBrightness.addEventListener("input", e => {
-              brightnessValue = clamp(
-                toInt(e.target.value, brightnessValue),
-                50,
-                150,
-              );
-              updateFilter();
-              store.save();
-            });
-          }
-
-          if ($controlGrayscale) {
-            $controlGrayscale.addEventListener("change", e => {
-              grayscaleEnabled = !!e.target.checked;
-              updateFilter();
-              store.save();
-            });
-          }
-
-          if ($controlTheme) {
-            $controlTheme.addEventListener("change", e => {
-              theme = e.target.value === "light" ? "light" : "dark";
-              applyTheme();
-              store.save();
-            });
-          }
-
-          if ($controlGrid) {
-            $controlGrid.addEventListener("change", e => {
-              gridVisible = !!e.target.checked;
-              updateGridVisibility();
-              store.save();
-            });
-          }
-
-          if ($controlGuides) {
-            $controlGuides.addEventListener("change", e => {
-              guidesVisible = !!e.target.checked;
-              updateGuidesVisibility();
-              store.save();
-            });
-          }
-
-          if ($controlGridColor) {
-            $controlGridColor.addEventListener("input", e => {
-              gridColor = e.target.value;
-              updateGridColor();
-              store.save();
-            });
-          }
-
-          if ($controlGuidesColor) {
-            $controlGuidesColor.addEventListener("input", e => {
-              guidesColor = e.target.value;
-              updateGuidesColor();
-              store.save();
-            });
-          }
-
-          if ($controlPaper) {
-            $controlPaper.addEventListener("change", e => {
-              paperSize = e.target.value;
-              setImageSize();
-              store.save();
-            });
-          }
-
-          if ($controlOrientation) {
-            $controlOrientation.addEventListener("change", e => {
-              orientationSelectValue = e.target.value;
-              setImageSize();
-              store.save();
-            });
-          }
-
-          if ($controlScreenMm) {
-            $controlScreenMm.addEventListener("change", e => {
-              screenWidthMm = clamp(
-                toInt(e.target.value, screenWidthMm),
-                50,
-                3000,
-              );
-              setImageSize();
-              store.save();
-            });
-          }
-
-          if ($btnFullscreen) {
-            $btnFullscreen.addEventListener("click", () => {
-              if (document.fullscreenElement) {
-                document.exitFullscreen();
-              } else {
-                document.documentElement.requestFullscreen();
-              }
-              store.save();
-            });
-          }
-
-          if ($btnWhiteScreen) {
-            $btnWhiteScreen.addEventListener("click", () => {
-              if ($whiteOverlay) {
-                $whiteOverlay.classList.toggle("visible");
-              }
-              store.save();
-            });
-          }
-
-          if ($btnReset) {
-            $btnReset.addEventListener("click", () => {
-              resetAllState();
-              applyTheme();
-              // Sync controls back to state
-              if ($controlContrast) $controlContrast.value = contrastValue;
-              if ($controlBrightness)
-                $controlBrightness.value = brightnessValue;
-              if ($controlGrayscale)
-                $controlGrayscale.checked = !!grayscaleEnabled;
-              if ($controlTheme) $controlTheme.value = theme;
-              if ($controlGrid) $controlGrid.checked = !!gridVisible;
-              if ($controlGuides) $controlGuides.checked = !!guidesVisible;
-              if ($controlGridColor) $controlGridColor.value = gridColor;
-              if ($controlGuidesColor) $controlGuidesColor.value = guidesColor;
-              if ($controlPaper) $controlPaper.value = paperSize;
-              if ($controlOrientation)
-                $controlOrientation.value = orientationSelectValue;
-              if ($controlScreenMm) $controlScreenMm.value = screenWidthMm;
-              if ($overlayPanel) {
-                if (CONFIG.defaults.controlsHidden) {
-                  $overlayPanel.removeAttribute("open");
-                } else {
-                  $overlayPanel.setAttribute("open", "");
-                }
-              }
-              store.save();
-            });
-          }
-        }
-
-        // Keyboard shortcuts
-        const handleWindowKeydown = e => {
-          // Avoid interfering with native shortcuts if modifier keys are used
-          if (e.altKey || e.metaKey || e.ctrlKey) return;
-
-          const key = e.key;
-          const active = document.activeElement;
-          const inputType =
-            active && active.tagName === "INPUT"
-              ? active.getAttribute("type") || "text"
-              : "";
-          const isTextLike =
-            active &&
-            (active.tagName === "TEXTAREA" ||
-              (active.tagName === "INPUT" &&
-                ["text", "number", "search", "email", "url"].indexOf(
-                  inputType,
-                ) !== -1));
-          const isSelect = active && active.tagName === "SELECT";
-          // Don't capture letter shortcuts when user is typing in a field
-          if (
-            isTextLike &&
-            ["g", "G", "c", "C", "w", "W", "f", "F", "r", "R"].indexOf(key) !==
-              -1
-          )
-            return;
-          // Don't capture arrows when focus is in a select (native list navigation)
-          if (
-            isSelect &&
-            ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(key) !==
-              -1
-          )
-            return;
-
-          let handled = false;
-
-          switch (key) {
-            case "Escape":
-              if ($overlayPanel && $overlayPanel.open) {
-                $overlayPanel.removeAttribute("open");
-                handled = true;
-              }
-              break;
-            case "ArrowLeft":
-              if ($panViewport) $panViewport.panX = $panViewport.panX - 10;
-              handled = true;
-              break;
-            case "ArrowRight":
-              if ($panViewport) $panViewport.panX = $panViewport.panX + 10;
-              handled = true;
-              break;
-            case "ArrowUp":
-              if ($panViewport) $panViewport.panY = $panViewport.panY - 10;
-              handled = true;
-              break;
-            case "ArrowDown":
-              if ($panViewport) $panViewport.panY = $panViewport.panY + 10;
-              handled = true;
-              break;
-            case "g":
-            case "G":
-              gridVisible = !gridVisible;
-              updateGridVisibility();
-              handled = true;
-              break;
-            case "c":
-            case "C":
-              guidesVisible = !guidesVisible;
-              updateGuidesVisibility();
-              handled = true;
-              break;
-            case "w":
-            case "W":
-              if ($whiteOverlay) {
-                $whiteOverlay.classList.toggle("visible");
-              }
-              handled = true;
-              break;
-            case "f":
-            case "F":
-              if (document.fullscreenElement) {
-                document.exitFullscreen();
-              } else {
-                document.documentElement.requestFullscreen();
-              }
-              handled = true;
-              break;
-            case "r":
-            case "R":
-              resetAllState();
-              handled = true;
-              break;
-          }
-
-          if (handled) {
-            store.save();
-            e.preventDefault();
-          }
-        };
-        window.addEventListener("keydown", handleWindowKeydown);
-
-        // Store listens to panel: when open state changes, persist and show toast
-        if ($overlayPanel) {
-          $overlayPanel.addEventListener("panel:change", e => {
-            store.save();
-            // Focus management: only move focus when user opened/closed (not on initial restore)
-            const open =
-              e.detail && typeof e.detail.open === "boolean"
-                ? e.detail.open
-                : $overlayPanel.open;
-            const active = document.activeElement;
-            if (open) {
-              if (
-                active &&
-                active.getAttribute &&
-                active.getAttribute("aria-controls") === "controlsPanel"
-              ) {
-                const first = $overlayPanel.querySelector(
-                  'button, [href], input:not([type="hidden"]), select, textarea',
-                );
-                if (first) first.focus();
-              }
-            } else {
-              if ($overlayPanel.contains(active)) {
-                const toggle = $('[aria-controls="controlsPanel"]');
-                if (toggle) toggle.focus();
-              }
-            }
+        connectedCallback() {
+          const $button = this.querySelector("button");
+          const name = this.getAttribute("name");
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+          $button.addEventListener("click", () => store.toggle(name), {
+            signal,
           });
+          signal.addEventListener(
+            "abort",
+            store.select(
+              state => state[name],
+              pressed => {
+                $button.setAttribute("aria-pressed", pressed.toString());
+              },
+            ),
+          );
         }
 
-        // Control panel (lil-gui)
-        if (window.lil && typeof window.lil.GUI === "function") {
-          const params = {
-            image: initialFile,
-            contrast: contrastValue,
-            brightness: brightnessValue,
-            grayscale: grayscaleEnabled,
-            grid: gridVisible,
-            guides: guidesVisible,
-            gridColor: gridColor,
-            guidesColor: guidesColor,
-            orientation: orientationSelectValue,
-            paper: paperSize,
-            screenWidthMm: screenWidthMm,
-            theme: theme,
-            reset: function () {
-              resetAllState();
-              store.save();
-            },
-            fullscreen: () => {
-              if (document.fullscreenElement) {
-                document.exitFullscreen();
-              } else {
-                document.documentElement.requestFullscreen();
-              }
-            },
-            whiteScreen: () => {
-              $whiteOverlay.classList.toggle("visible");
-              store.save();
-            },
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define("overlay-toggle", OverlayToggleElement);
+
+      /** The fullscreen is the document's: the button follows it. */
+      class OverlayFullscreenToggleElement extends HTMLElement {
+        #controller = null;
+
+        connectedCallback() {
+          const $button = this.querySelector("button");
+          // Safari on iPhone has no fullscreen for a page.
+          this.hidden = !document.fullscreenEnabled;
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+
+          const render = () => {
+            const fullscreen = document.fullscreenElement !== null;
+            $button.setAttribute("aria-pressed", fullscreen.toString());
           };
 
-          const gui = new window.lil.GUI({ title: "Overlay" });
-
-          // Image
-          gui
-            .add(
-              params,
-              "image",
-              IMAGES.map(item => {
-                return item.file;
-              }),
-            )
-            .name("Image")
-            .onChange(file => {
-              if (!file) return;
-              selectImage(file);
-              if ($panViewport && $panViewport.resetPan)
-                $panViewport.resetPan();
-              store.save();
-            });
-
-          // Contrast
-          gui
-            .add(params, "contrast", 50, 500)
-            .step(1)
-            .name("Contrast")
-            .onChange(v => {
-              contrastValue = clamp(toInt(v, contrastValue), 50, 500);
-              params.contrast = contrastValue;
-              updateFilter();
-              store.save();
-            });
-
-          // Brightness
-          gui
-            .add(params, "brightness", 50, 150)
-            .step(1)
-            .name("Brightness")
-            .onChange(v => {
-              brightnessValue = clamp(toInt(v, brightnessValue), 50, 150);
-              params.brightness = brightnessValue;
-              updateFilter();
-              store.save();
-            });
-
-          // Grayscale
-          gui
-            .add(params, "grayscale")
-            .name("Grayscale")
-            .onChange(v => {
-              grayscaleEnabled = !!v;
-              updateFilter();
-              store.save();
-            });
-
-          // Orientation
-          gui
-            .add(params, "orientation", ["auto", "landscape", "portrait"])
-            .name("Orientation")
-            .onChange(v => {
-              orientationSelectValue = v;
-              setImageSize();
-              store.save();
-            });
-
-          // Grid
-          gui
-            .add(params, "grid")
-            .name("Grid")
-            .onChange(v => {
-              gridVisible = !!v;
-              updateGridVisibility();
-              store.save();
-            });
-
-          // Grid color
-          gui
-            .addColor(params, "gridColor")
-            .name("Grid color")
-            .onChange(v => {
-              gridColor = v;
-              updateGridColor();
-              store.save();
-            });
-
-          // Center guides
-          gui
-            .add(params, "guides")
-            .name("Center guides")
-            .onChange(v => {
-              guidesVisible = !!v;
-              updateGuidesVisibility();
-              store.save();
-            });
-
-          // Guides color
-          gui
-            .addColor(params, "guidesColor")
-            .name("Guides color")
-            .onChange(v => {
-              guidesColor = v;
-              updateGuidesColor();
-              store.save();
-            });
-
-          // Paper size
-          gui
-            .add(params, "paper", ["A3", "A4"])
-            .name("Paper size")
-            .onChange(v => {
-              paperSize = v;
-              setImageSize();
-              store.save();
-            });
-
-          // Theme
-          gui
-            .add(params, "theme", ["dark", "light"])
-            .name("Theme")
-            .onChange(v => {
-              theme = v === "light" ? "light" : "dark";
-              applyTheme();
-              store.save();
-            });
-
-          // Screen calibration
-          const screenFolder = gui.addFolder("Screen");
-          screenFolder
-            .add(params, "screenWidthMm", 200, 800)
-            .step(1)
-            .name("Width (mm)")
-            .onChange(v => {
-              screenWidthMm = clamp(toInt(v, screenWidthMm), 50, 3000);
-              params.screenWidthMm = screenWidthMm;
-              setImageSize();
-              store.save();
-            });
-
-          // Actions
-          gui.add(params, "reset").name("Reset");
-          gui.add(params, "fullscreen").name("Fullscreen");
-          gui.add(params, "whiteScreen").name("White screen");
+          render();
+          $button.addEventListener("click", toggleFullscreen, { signal });
+          document.addEventListener("fullscreenchange", render, { signal });
         }
-      })();
+
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define(
+        "overlay-fullscreen-toggle",
+        OverlayFullscreenToggleElement,
+      );
+
+      class OverlayThemeToggleElement extends HTMLElement {
+        #controller = null;
+
+        connectedCallback() {
+          const $button = this.querySelector("button");
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+          $button.addEventListener("click", () => store.toggleTheme(), {
+            signal,
+          });
+          signal.addEventListener(
+            "abort",
+            store.select(
+              state => state.theme,
+              theme => {
+                const dark = theme === "dark";
+                // U+FE0E forces text presentation (no emoji rendering).
+                $button.textContent = dark ? "☀︎" : "☽︎";
+                $button.setAttribute("aria-pressed", dark.toString());
+              },
+            ),
+          );
+        }
+
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define("overlay-theme-toggle", OverlayThemeToggleElement);
+
+      class OverlayResetElement extends HTMLElement {
+        #controller = null;
+
+        connectedCallback() {
+          const $button = this.querySelector("button");
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+          $button.addEventListener("click", () => store.reset(), { signal });
+        }
+
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define("overlay-reset", OverlayResetElement);
+
+      /** What a key does, in lower case, with no modifier. */
+      const KEYS = {
+        arrowleft: () => store.movePan(-PAN_STEP_PX, 0),
+        arrowright: () => store.movePan(PAN_STEP_PX, 0),
+        arrowup: () => store.movePan(0, -PAN_STEP_PX),
+        arrowdown: () => store.movePan(0, PAN_STEP_PX),
+        g: () => store.toggle("grid"),
+        c: () => store.toggle("guides"),
+        l: () => store.toggle("locked"),
+        w: () => store.toggle("whiteScreen"),
+        f: toggleFullscreen,
+        r: () => store.reset(),
+      };
+
+      /** Lists the keyboard shortcuts, and handles them. */
+      class OverlayShortcutsElement extends HTMLElement {
+        #controller = null;
+        #hideTimeout = null;
+
+        connectedCallback() {
+          const $panel = this.querySelector("[popover]");
+
+          for (const $mod of this.querySelectorAll(".js-overlay-mod")) {
+            $mod.textContent = isMac ? "⌘" : "Ctrl";
+          }
+
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+
+          document.addEventListener(
+            "keydown",
+            event => {
+              // A field keeps its keys: the arrows change a range or a select.
+              if (event.target.matches("input, select, textarea")) return;
+              const key = event.key.toLowerCase();
+              const mod = isMac ? event.metaKey : event.ctrlKey;
+              if (mod && !event.altKey && !event.shiftKey && key === "k") {
+                event.preventDefault();
+                store.toggleTheme();
+                return;
+              }
+              if (event.metaKey || event.ctrlKey || event.altKey) return;
+              const action = KEYS[key];
+              if (!action) return;
+              event.preventDefault();
+              action();
+            },
+            { signal },
+          );
+
+          // Hover is a mouse-only enhancement; touch and keyboard use the
+          // native popovertarget (closed by Escape or light dismiss).
+          this.addEventListener(
+            "pointerenter",
+            event => {
+              if (event.pointerType !== "mouse") return;
+              clearTimeout(this.#hideTimeout);
+              if (!$panel.matches(":popover-open")) $panel.showPopover();
+            },
+            { signal },
+          );
+          this.addEventListener(
+            "pointerleave",
+            event => {
+              if (event.pointerType !== "mouse") return;
+              this.#hideTimeout = setTimeout(() => {
+                if ($panel.matches(":popover-open")) $panel.hidePopover();
+              }, SHORTCUTS_HIDE_DELAY_MS);
+            },
+            { signal },
+          );
+        }
+
+        disconnectedCallback() {
+          this.#controller?.abort();
+          clearTimeout(this.#hideTimeout);
+        }
+      }
+      customElements.define("overlay-shortcuts", OverlayShortcutsElement);
+
+      // The screen stays on while the page is shown: a tablet would go to
+      // sleep under the paper. Hidden, the page loses the lock; shown again,
+      // it asks for it again.
+      if ("wakeLock" in navigator) {
+        const requestWakeLock = () => {
+          if (document.visibilityState !== "visible") return;
+          navigator.wakeLock.request("screen").catch(() => {});
+        };
+
+        requestWakeLock();
+        document.addEventListener("visibilitychange", requestWakeLock);
+      }
     </script>
   </body>
 </html>
