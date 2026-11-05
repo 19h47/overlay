@@ -22,6 +22,17 @@
           var(--overlay-u4) * var(--app-phi) * var(--app-phi) * var(--app-phi)
         );
 
+        /*
+         * A millimetre on the screen: the width of a bank card laid on it, as calibrated, divided by the width of the
+         * card (ISO/IEC 7810 ID-1). CSS pixels keep their size when the screen turns or the window changes.
+         */
+        --overlay-card-width-mm: 85.6;
+        --overlay-card-height-mm: 53.98;
+        --overlay-card-radius-mm: 3.18;
+        --overlay-mm: calc(
+          var(--overlay-card-width-px) * 1px / var(--overlay-card-width-mm)
+        );
+
         /* The white screen lights the paper, whatever the theme */
         --overlay-white: rgb(255, 255, 255);
         --overlay-grid-line-width: 1px;
@@ -56,12 +67,8 @@
         cursor: default;
       }
 
-      /*
-       * The sheet, at the size of the paper laid on the screen: a millimetre of paper is the width of the screen
-       * divided by its width in millimetres. Its long side across, unless it stands in portrait.
-       */
+      /* The sheet, at the size of the paper laid on the screen. Its long side across, unless it stands in portrait. */
       overlay-sheet {
-        --overlay-mm: calc(100vw / var(--overlay-screen-width));
         --overlay-sheet-width: var(--overlay-paper-long);
         --overlay-sheet-height: var(--overlay-paper-short);
 
@@ -243,7 +250,7 @@
           overlay var(--app-transition-1) allow-discrete;
       }
 
-      .overlay-panel:popover-open {
+      .overlay-panel:is(:popover-open, [open]) {
         opacity: 1;
         translate: 0 0;
 
@@ -332,6 +339,54 @@
       .overlay-settings__field output {
         font-variant-numeric: tabular-nums;
         text-align: end;
+      }
+
+      .overlay-settings__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--app-control-gap);
+      }
+
+      /* Centered on the screen, as a modal dialog is */
+      .overlay-calibration {
+        --overlay-panel-from: var(--app-u0);
+
+        margin: auto;
+        max-height: calc(100dvh - 2 * var(--app-u2));
+        overflow: auto;
+      }
+
+      .overlay-calibration__help {
+        max-width: var(--overlay-panel-width);
+        margin-bottom: var(--app-u2);
+      }
+
+      /* A bank card at the size the screen gives it: laid on it, a real one covers it exactly once calibrated */
+      .overlay-calibration__card {
+        width: calc(var(--overlay-card-width-mm) * var(--overlay-mm));
+        aspect-ratio: var(--overlay-card-width-mm) /
+          var(--overlay-card-height-mm);
+        margin-bottom: var(--app-u2);
+        border: 1px solid var(--app-text);
+        border-radius: calc(var(--overlay-card-radius-mm) * var(--overlay-mm));
+        background: var(--app-fill);
+      }
+
+      .overlay-calibration__width {
+        display: flex;
+        gap: var(--app-control-gap);
+        align-items: center;
+        margin-bottom: var(--app-u2);
+      }
+
+      .overlay-calibration__width label {
+        flex: 1;
+        display: flex;
+      }
+
+      .overlay-calibration__width input {
+        flex: 1;
+        accent-color: var(--app-text);
       }
 
       overlay-shortcuts {
@@ -430,7 +485,7 @@
           "guides": true,
           "gridColor": "#000000",
           "guidesColor": "#ff0000",
-          "screenWidthMm": 302
+          "cardWidthPx": 324
         }
       }
     </script>
@@ -538,7 +593,7 @@
           guides: boolean,
           gridColor: color,
           guidesColor: color,
-          screenWidthMm: between(50, 3000),
+          cardWidthPx: between(150, 800),
           panX: finite,
           panY: finite,
           locked: boolean,
@@ -628,6 +683,10 @@
             this.setOption(name, !this.get()[name]);
           }
 
+          step(name, by) {
+            this.setOption(name, this.get()[name] + by);
+          }
+
           /** Locked, the sheet stays where it is: neither dragged nor moved by the keys. */
           setPan(panX, panY) {
             if (this.get().locked) return;
@@ -687,7 +746,17 @@
 
         const store = new OverlayStore();
 
-        // The document follows the store: CSS reads these attributes.
+        // The document follows the store: CSS reads these attributes and
+        // this property.
+        store.select(
+          state => state.cardWidthPx,
+          cardWidthPx => {
+            $root.style.setProperty(
+              "--overlay-card-width-px",
+              cardWidthPx.toString(),
+            );
+          },
+        );
         store.select(
           state => state.theme,
           theme => {
@@ -890,25 +959,78 @@
             <input type="color" name="guidesColor" />
           </label>
         </overlay-field>
+      </div>
+      <div class="overlay-settings__actions">
+        <button
+          class="app-pill"
+          type="button"
+          command="show-modal"
+          commandfor="overlay-calibration"
+        >
+          Calibrer…
+        </button>
+        <overlay-reset>
+          <button class="app-pill" type="button">Réinitialiser (R)</button>
+        </overlay-reset>
+      </div>
+    </div>
+
+    <dialog
+      class="overlay-panel overlay-calibration"
+      id="overlay-calibration"
+      aria-labelledby="overlay-calibration-title"
+    >
+      <h2 class="overlay-panel__title app-meta" id="overlay-calibration-title">
+        Calibrer
+      </h2>
+      <p class="overlay-calibration__help">
+        Posez une carte bancaire sur le rectangle, puis ajustez-le jusqu’à ce
+        qu’il ait la taille de la carte : la feuille sera à l’échelle.
+      </p>
+      <div class="overlay-calibration__card" aria-hidden="true"></div>
+      <div class="overlay-calibration__width">
+        <overlay-step name="cardWidthPx" by="-1">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Rétrécir"
+            title="Rétrécir"
+          >
+            −
+          </button>
+        </overlay-step>
         <overlay-field>
-          <label class="overlay-settings__field">
-            <span>Largeur de l’écran</span>
+          <label>
+            <span class="sr-only">Largeur de la carte</span>
             <input
-              class="app-field"
-              type="number"
-              name="screenWidthMm"
-              min="50"
-              max="3000"
+              type="range"
+              name="cardWidthPx"
+              min="150"
+              max="800"
               step="1"
             />
-            <span>mm</span>
           </label>
         </overlay-field>
+        <overlay-step name="cardWidthPx" by="1">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Agrandir"
+            title="Agrandir"
+          >
+            +
+          </button>
+        </overlay-step>
       </div>
-      <overlay-reset>
-        <button class="app-pill" type="button">Réinitialiser (R)</button>
-      </overlay-reset>
-    </div>
+      <button
+        class="app-pill"
+        type="button"
+        command="close"
+        commandfor="overlay-calibration"
+      >
+        OK
+      </button>
+    </dialog>
 
     <overlay-shortcuts>
       <button
@@ -1101,12 +1223,6 @@
             orientation: orientation => {
               this.dataset.orientation = orientation;
             },
-            screenWidthMm: screenWidthMm => {
-              this.style.setProperty(
-                "--overlay-screen-width",
-                screenWidthMm.toString(),
-              );
-            },
             contrast: contrast => {
               this.style.setProperty("--overlay-contrast", contrast.toString());
             },
@@ -1226,6 +1342,27 @@
         }
       }
       customElements.define("overlay-toggle", OverlayToggleElement);
+
+      /** A button that steps the option of the store its name gives, by the number of its by attribute. */
+      class OverlayStepElement extends HTMLElement {
+        #controller = null;
+
+        connectedCallback() {
+          const $button = this.querySelector("button");
+          const name = this.getAttribute("name");
+          const by = Number(this.getAttribute("by"));
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+          $button.addEventListener("click", () => store.step(name, by), {
+            signal,
+          });
+        }
+
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define("overlay-step", OverlayStepElement);
 
       /** The fullscreen is the document's: the button follows it. */
       class OverlayFullscreenToggleElement extends HTMLElement {
