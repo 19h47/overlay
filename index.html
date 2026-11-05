@@ -62,7 +62,7 @@
         cursor: grabbing;
       }
 
-      /* Locked, the sheet stays where it is */
+      /* Locked, the sheet and the image stay where they are */
       overlay-viewport:state(locked) {
         cursor: default;
       }
@@ -79,6 +79,8 @@
         height: calc(var(--overlay-sheet-height) * var(--overlay-mm));
         translate: calc(var(--overlay-pan-x, 0px) - 50%)
           calc(var(--overlay-pan-y, 0px) - 50%);
+        /* The image, moved, zoomed or turned, ends at the edge of the paper */
+        overflow: clip;
       }
 
       overlay-sheet[data-paper="A3"] {
@@ -108,6 +110,11 @@
         width: 100%;
         height: 100%;
         object-fit: contain;
+        /* Moved on the sheet, then turned and zoomed around its center */
+        translate: var(--overlay-image-pan-x, 0px)
+          var(--overlay-image-pan-y, 0px);
+        rotate: calc(var(--overlay-image-rotation, 0) * 1deg);
+        scale: calc(var(--overlay-image-scale, 100) / 100);
         filter: grayscale(var(--overlay-grayscale, 0))
           contrast(calc(var(--overlay-contrast) * 1%))
           brightness(calc(var(--overlay-brightness) * 1%));
@@ -607,6 +614,11 @@
           cardWidthPx: between(150, 800),
           panX: finite,
           panY: finite,
+          moveImage: boolean,
+          imagePanX: finite,
+          imagePanY: finite,
+          imageScale: between(25, 400),
+          imageRotation: between(-180, 180),
           locked: boolean,
           whiteScreen: boolean,
         };
@@ -616,9 +628,24 @@
           image: config.images[0]?.file,
           panX: 0,
           panY: 0,
+          moveImage: false,
+          imagePanX: 0,
+          imagePanY: 0,
+          imageScale: 100,
+          imageRotation: 0,
           locked: false,
           whiteScreen: false,
         };
+
+        /** What the lock holds still: where the sheet and the image are, and how large and turned the image is. */
+        const HELD = [
+          "panX",
+          "panY",
+          "imagePanX",
+          "imagePanY",
+          "imageScale",
+          "imageRotation",
+        ];
 
         /**
          * What localStorage holds, checked: anything else falls back to the
@@ -689,11 +716,19 @@
             return config.imagesDir;
           }
 
-          /** A value the option does not accept is ignored; a number is kept within its bounds. */
+          /** Locked, whether the option stays as it is. */
+          isHeld(name, state = this.get()) {
+            return state.locked && HELD.includes(name);
+          }
+
+          /**
+           * A value the option does not accept is ignored, as is any while
+           * the lock holds the option; a number is kept within its bounds.
+           */
           setOption(name, value) {
             const accepted = OPTIONS[name]?.(value, this.get());
 
-            if (accepted === undefined) return;
+            if (accepted === undefined || this.isHeld(name)) return;
 
             this.#change({ [name]: accepted });
           }
@@ -715,17 +750,31 @@
             this.#change({ localImage: image, image: image.file });
           }
 
-          /** Locked, the sheet stays where it is: neither dragged nor moved by the keys. */
-          setPan(panX, panY) {
-            if (this.get().locked) return;
+          /** Where the drag and the arrows move: the image on the sheet, or the sheet. */
+          get pan() {
+            const { moveImage, panX, panY, imagePanX, imagePanY } = this.get();
 
-            this.#change({ panX, panY });
+            return moveImage
+              ? { x: imagePanX, y: imagePanY }
+              : { x: panX, y: panY };
+          }
+
+          /** Locked, the sheet and the image stay where they are: neither dragged nor moved by the keys. */
+          setPan(x, y) {
+            const { locked, moveImage } = this.get();
+            const pan = moveImage
+              ? { imagePanX: x, imagePanY: y }
+              : { panX: x, panY: y };
+
+            if (locked) return;
+
+            this.#change(pan);
           }
 
           movePan(dx, dy) {
-            const { panX, panY } = this.get();
+            const { x, y } = this.pan;
 
-            this.setPan(panX + dx, panY + dy);
+            this.setPan(x + dx, y + dy);
           }
 
           toggleTheme() {
@@ -894,6 +943,16 @@
             +
           </button>
         </overlay-toggle>
+        <overlay-toggle name="moveImage">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Déplacer l’image sur la feuille (I)"
+            title="Déplacer l’image sur la feuille (I)"
+          >
+            ✥&#xFE0E;
+          </button>
+        </overlay-toggle>
         <overlay-toggle name="locked">
           <button
             class="app-control"
@@ -942,6 +1001,26 @@
     >
       <h2 class="overlay-panel__title app-meta">Réglages</h2>
       <div class="overlay-settings__fields">
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Zoom</span>
+            <input type="range" name="imageScale" min="25" max="400" step="1" />
+            <span><output></output> %</span>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Rotation</span>
+            <input
+              type="range"
+              name="imageRotation"
+              min="-180"
+              max="180"
+              step="1"
+            />
+            <span><output></output>°</span>
+          </label>
+        </overlay-field>
         <overlay-field>
           <label class="overlay-settings__field">
             <span>Contraste</span>
@@ -1096,7 +1175,17 @@
               <td class="overlay-shortcuts__keys">
                 <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd>
               </td>
-              <td>Déplacer l’image</td>
+              <td>Déplacer la feuille, ou l’image</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>I</kbd></td>
+              <td>Déplacer l’image sur la feuille</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys">
+                <kbd>+</kbd> <kbd>−</kbd>
+              </td>
+              <td>Zoom</td>
             </tr>
             <tr>
               <td class="overlay-shortcuts__keys"><kbd>G</kbd></td>
@@ -1137,6 +1226,7 @@
       const { store } = window;
 
       const PAN_STEP_PX = 10;
+      const ZOOM_STEP = 5;
       const SHORTCUTS_HIDE_DELAY_MS = 150;
 
       const isMac = /mac|iphone|ipad/i.test(
@@ -1172,10 +1262,10 @@
             "pointerdown",
             event => {
               if (event.button !== 0) return;
-              const { panX, panY } = store.get();
+              const { x, y } = store.pan;
               this.#origin = {
-                x: event.clientX - panX,
-                y: event.clientY - panY,
+                x: event.clientX - x,
+                y: event.clientY - y,
               };
               this.setPointerCapture(event.pointerId);
               this.#internals.states.add("dragging");
@@ -1255,6 +1345,24 @@
               const image = store.images.find(item => item.file === file);
               $image.src = new URL(file, imagesUrl).href;
               $image.alt = image.name;
+            },
+            imagePanX: imagePanX => {
+              this.style.setProperty("--overlay-image-pan-x", `${imagePanX}px`);
+            },
+            imagePanY: imagePanY => {
+              this.style.setProperty("--overlay-image-pan-y", `${imagePanY}px`);
+            },
+            imageScale: imageScale => {
+              this.style.setProperty(
+                "--overlay-image-scale",
+                imageScale.toString(),
+              );
+            },
+            imageRotation: imageRotation => {
+              this.style.setProperty(
+                "--overlay-image-rotation",
+                imageRotation.toString(),
+              );
             },
             paper: paper => {
               this.dataset.paper = paper;
@@ -1337,6 +1445,15 @@
           signal.addEventListener(
             "abort",
             store.select(state => state[name], render),
+          );
+          signal.addEventListener(
+            "abort",
+            store.select(
+              state => store.isHeld(name, state),
+              held => {
+                $control.disabled = held;
+              },
+            ),
           );
         }
 
@@ -1428,6 +1545,15 @@
           $button.addEventListener("click", () => store.step(name, by), {
             signal,
           });
+          signal.addEventListener(
+            "abort",
+            store.select(
+              state => store.isHeld(name, state),
+              held => {
+                $button.disabled = held;
+              },
+            ),
+          );
         }
 
         disconnectedCallback() {
@@ -1518,6 +1644,9 @@
         arrowright: () => store.movePan(PAN_STEP_PX, 0),
         arrowup: () => store.movePan(0, -PAN_STEP_PX),
         arrowdown: () => store.movePan(0, PAN_STEP_PX),
+        "+": () => store.step("imageScale", ZOOM_STEP),
+        "-": () => store.step("imageScale", -ZOOM_STEP),
+        i: () => store.toggle("moveImage"),
         g: () => store.toggle("grid"),
         c: () => store.toggle("guides"),
         l: () => store.toggle("locked"),
