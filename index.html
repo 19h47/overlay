@@ -22,6 +22,17 @@
           var(--overlay-u4) * var(--app-phi) * var(--app-phi) * var(--app-phi)
         );
 
+        /*
+         * A millimetre on the screen: the width of a bank card laid on it, as calibrated, divided by the width of the
+         * card (ISO/IEC 7810 ID-1). CSS pixels keep their size when the screen turns or the window changes.
+         */
+        --overlay-card-width-mm: 85.6;
+        --overlay-card-height-mm: 53.98;
+        --overlay-card-radius-mm: 3.18;
+        --overlay-mm: calc(
+          var(--overlay-card-width-px) * 1px / var(--overlay-card-width-mm)
+        );
+
         /* The white screen lights the paper, whatever the theme */
         --overlay-white: rgb(255, 255, 255);
         --overlay-grid-line-width: 1px;
@@ -51,17 +62,13 @@
         cursor: grabbing;
       }
 
-      /* Locked, the sheet stays where it is */
+      /* Locked, the sheet and the image stay where they are */
       overlay-viewport:state(locked) {
         cursor: default;
       }
 
-      /*
-       * The sheet, at the size of the paper laid on the screen: a millimetre of paper is the width of the screen
-       * divided by its width in millimetres. Its long side across, unless it stands in portrait.
-       */
+      /* The sheet, at the size of the paper laid on the screen. Its long side across, unless it stands in portrait. */
       overlay-sheet {
-        --overlay-mm: calc(100vw / var(--overlay-screen-width));
         --overlay-sheet-width: var(--overlay-paper-long);
         --overlay-sheet-height: var(--overlay-paper-short);
 
@@ -72,6 +79,8 @@
         height: calc(var(--overlay-sheet-height) * var(--overlay-mm));
         translate: calc(var(--overlay-pan-x, 0px) - 50%)
           calc(var(--overlay-pan-y, 0px) - 50%);
+        /* The image, moved, zoomed or turned, ends at the edge of the paper */
+        overflow: clip;
       }
 
       overlay-sheet[data-paper="A3"] {
@@ -101,6 +110,14 @@
         width: 100%;
         height: 100%;
         object-fit: contain;
+        /* Moved on the sheet, then turned, zoomed and flipped around its center */
+        translate: var(--overlay-image-pan-x, 0px)
+          var(--overlay-image-pan-y, 0px);
+        rotate: calc(var(--overlay-image-rotation, 0) * 1deg);
+        scale: calc(
+            var(--overlay-image-flip, 1) * var(--overlay-image-scale, 100) / 100
+          )
+          calc(var(--overlay-image-scale, 100) / 100);
         filter: grayscale(var(--overlay-grayscale, 0))
           contrast(calc(var(--overlay-contrast) * 1%))
           brightness(calc(var(--overlay-brightness) * 1%));
@@ -108,6 +125,11 @@
 
       overlay-sheet[data-grayscale] img {
         --overlay-grayscale: 1;
+      }
+
+      /* In a mirror, left to right */
+      overlay-sheet[data-mirrored] img {
+        --overlay-image-flip: -1;
       }
 
       .overlay-sheet__grid,
@@ -180,17 +202,46 @@
         visibility: visible;
       }
 
+      /* The label of a file input is its control: it shows the focus of the input */
+      .app-control:has(:focus-visible) {
+        border-color: var(--app-line);
+        color: var(--app-text);
+        outline: var(--app-focus-outline);
+        outline-offset: var(--app-focus-outline-offset);
+      }
+
       /* A field brick lays out nothing: the label it holds does */
       overlay-field {
         display: contents;
       }
 
-      /* The pills stay top-left, facing the toolbar, floating like it over the sheet */
-      .overlay-pills {
+      /*
+       * The pills top-left, the toolbar top-right, floating over the sheet; where the screen has no room for both on
+       * a line, the toolbar goes under the pills
+       */
+      .overlay-bar {
         position: fixed;
-        top: var(--app-u2);
-        left: var(--app-u2);
+        inset: var(--app-u2) var(--app-u2) auto;
         z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--app-control-gap);
+        /* Between the pills and the toolbar, the sheet is still dragged */
+        pointer-events: none;
+      }
+
+      .overlay-bar > * {
+        pointer-events: auto;
+      }
+
+      .overlay-bar .app-toolbar {
+        position: static;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        margin-left: auto;
+      }
+
+      .overlay-pills {
         display: flex;
         flex-wrap: wrap;
         gap: var(--app-control-gap);
@@ -222,7 +273,7 @@
           overlay var(--app-transition-1) allow-discrete;
       }
 
-      .overlay-panel:popover-open {
+      .overlay-panel:is(:popover-open, [open]) {
         opacity: 1;
         translate: 0 0;
 
@@ -313,6 +364,54 @@
         text-align: end;
       }
 
+      .overlay-settings__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--app-control-gap);
+      }
+
+      /* Centered on the screen, as a modal dialog is */
+      .overlay-calibration {
+        --overlay-panel-from: var(--app-u0);
+
+        margin: auto;
+        max-height: calc(100dvh - 2 * var(--app-u2));
+        overflow: auto;
+      }
+
+      .overlay-calibration__help {
+        max-width: var(--overlay-panel-width);
+        margin-bottom: var(--app-u2);
+      }
+
+      /* A bank card at the size the screen gives it: laid on it, a real one covers it exactly once calibrated */
+      .overlay-calibration__card {
+        width: calc(var(--overlay-card-width-mm) * var(--overlay-mm));
+        aspect-ratio: var(--overlay-card-width-mm) /
+          var(--overlay-card-height-mm);
+        margin-bottom: var(--app-u2);
+        border: 1px solid var(--app-text);
+        border-radius: calc(var(--overlay-card-radius-mm) * var(--overlay-mm));
+        background: var(--app-fill);
+      }
+
+      .overlay-calibration__width {
+        display: flex;
+        gap: var(--app-control-gap);
+        align-items: center;
+        margin-bottom: var(--app-u2);
+      }
+
+      .overlay-calibration__width label {
+        flex: 1;
+        display: flex;
+      }
+
+      .overlay-calibration__width input {
+        flex: 1;
+        accent-color: var(--app-text);
+      }
+
       overlay-shortcuts {
         position: fixed;
         right: 0;
@@ -378,19 +477,19 @@
         "imagesDir": "images/",
         "images": [
           { "name": "⊠ Andor S02E01", "file": "2026-02-21-andor-s02e01.png" },
-          { "name": "Andor S02E02", "file": "2026-02-22-andor-s02e02-01.png" },
-          { "name": "Andor S02E03", "file": "2026-02-22-andor-s02e02-02.png" },
+          { "name": "Andor S02E02", "file": "2026-02-22-andor-s02e02.png" },
+          { "name": "Andor S02E03", "file": "2026-02-22-andor-s02e03.png" },
           { "name": "⊠ Wario Land", "file": "wario-land.jpg" },
           { "name": "⊠ Picsou", "file": "picsou.jpg" },
           { "name": "Chuck Norris", "file": "chuck-norris.jpg" },
           { "name": "Duck Tales", "file": "duck-tales.jpg" },
           {
-            "name": "Le monde de Kaël",
+            "name": "Le monde de Kaël (couleur)",
             "file": "le-monde-de-kael-couleur.jpeg"
           },
           { "name": "Sonic Adventure", "file": "sonic-adventure.jpg" },
           {
-            "name": "Le monde de Kaël",
+            "name": "Le monde de Kaël (noir et blanc)",
             "file": "le-monde-de-kael-noir-et-blanc.jpeg"
           },
           {
@@ -409,7 +508,7 @@
           "guides": true,
           "gridColor": "#000000",
           "guidesColor": "#ff0000",
-          "screenWidthMm": 302
+          "cardWidthPx": 324
         }
       }
     </script>
@@ -504,9 +603,12 @@
         const color = value =>
           /^#[\da-f]{6}$/i.test(value) ? value : undefined;
 
-        /** Each option of the page, and what it accepts: anything else is undefined. */
+        /** Each option of the page, and what it accepts given the state: anything else is undefined. */
         const OPTIONS = {
-          image: oneOf(config.images.map(({ file }) => file)),
+          image: (value, { localImage }) =>
+            [...config.images, localImage].some(image => image?.file === value)
+              ? value
+              : undefined,
           paper: oneOf(["A3", "A4"]),
           orientation: oneOf(["auto", "landscape", "portrait"]),
           contrast: between(50, 500),
@@ -517,9 +619,15 @@
           guides: boolean,
           gridColor: color,
           guidesColor: color,
-          screenWidthMm: between(50, 3000),
+          cardWidthPx: between(150, 800),
           panX: finite,
           panY: finite,
+          moveImage: boolean,
+          imagePanX: finite,
+          imagePanY: finite,
+          imageScale: between(25, 400),
+          imageRotation: between(-180, 180),
+          mirrored: boolean,
           locked: boolean,
           whiteScreen: boolean,
         };
@@ -529,12 +637,36 @@
           image: config.images[0]?.file,
           panX: 0,
           panY: 0,
+          moveImage: false,
+          imagePanX: 0,
+          imagePanY: 0,
+          imageScale: 100,
+          imageRotation: 0,
+          mirrored: false,
           locked: false,
           whiteScreen: false,
         };
 
-        /** What localStorage holds, checked: anything else falls back. */
-        function load() {
+        /**
+         * What the lock holds still: where the sheet and the image are, how
+         * large and turned the image is, and which way it faces.
+         */
+        const HELD = [
+          "panX",
+          "panY",
+          "imagePanX",
+          "imagePanY",
+          "imageScale",
+          "imageRotation",
+          "mirrored",
+        ];
+
+        /**
+         * What localStorage holds, checked: anything else falls back to the
+         * current state. An image opened from the device lives as long as
+         * the page: none at first, and the one of another tab is not this one.
+         */
+        function load(current = { ...DEFAULTS, localImage: null }) {
           let saved = null;
           try {
             saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -542,7 +674,7 @@
           const options = Object.fromEntries(
             Object.entries(OPTIONS).map(([name, accept]) => [
               name,
-              accept(saved?.[name]) ?? DEFAULTS[name],
+              accept(saved?.[name], current) ?? current[name],
             ]),
           );
           const theme = ["light", "dark"].includes(saved?.theme)
@@ -550,6 +682,7 @@
             : null;
           return {
             ...options,
+            localImage: current.localImage,
             // The theme shown, and whether it was chosen over the system one.
             theme: theme ?? (darkQuery.matches ? "dark" : "light"),
             themeChosen: theme !== null,
@@ -582,23 +715,34 @@
             // its own waiting to be saved.
             addEventListener("storage", ({ key }) => {
               if (key !== STORAGE_KEY || this.#pending) return;
-              this.set(state => ({ ...state, ...load() }));
+              this.set(state => ({ ...state, ...load(state) }));
             });
           }
 
+          /** The images of the list, then the one opened from the device. */
           get images() {
-            return config.images;
+            const { localImage } = this.get();
+
+            return localImage ? [...config.images, localImage] : config.images;
           }
 
           get imagesDir() {
             return config.imagesDir;
           }
 
-          /** A value the option does not accept is ignored; a number is kept within its bounds. */
-          setOption(name, value) {
-            const accepted = OPTIONS[name]?.(value);
+          /** Locked, whether the option stays as it is. */
+          isHeld(name, state = this.get()) {
+            return state.locked && HELD.includes(name);
+          }
 
-            if (accepted === undefined) return;
+          /**
+           * A value the option does not accept is ignored, as is any while
+           * the lock holds the option; a number is kept within its bounds.
+           */
+          setOption(name, value) {
+            const accepted = OPTIONS[name]?.(value, this.get());
+
+            if (accepted === undefined || this.isHeld(name)) return;
 
             this.#change({ [name]: accepted });
           }
@@ -607,17 +751,44 @@
             this.setOption(name, !this.get()[name]);
           }
 
-          /** Locked, the sheet stays where it is: neither dragged nor moved by the keys. */
-          setPan(panX, panY) {
-            if (this.get().locked) return;
+          step(name, by) {
+            this.setOption(name, this.get()[name] + by);
+          }
 
-            this.#change({ panX, panY });
+          /** Shows an image of the device, in place of the one opened before. */
+          openImage(file) {
+            const { localImage } = this.get();
+            const image = { name: file.name, file: URL.createObjectURL(file) };
+
+            if (localImage) URL.revokeObjectURL(localImage.file);
+            this.#change({ localImage: image, image: image.file });
+          }
+
+          /** Where the drag and the arrows move: the image on the sheet, or the sheet. */
+          get pan() {
+            const { moveImage, panX, panY, imagePanX, imagePanY } = this.get();
+
+            return moveImage
+              ? { x: imagePanX, y: imagePanY }
+              : { x: panX, y: panY };
+          }
+
+          /** Locked, the sheet and the image stay where they are: neither dragged nor moved by the keys. */
+          setPan(x, y) {
+            const { locked, moveImage } = this.get();
+            const pan = moveImage
+              ? { imagePanX: x, imagePanY: y }
+              : { panX: x, panY: y };
+
+            if (locked) return;
+
+            this.#change(pan);
           }
 
           movePan(dx, dy) {
-            const { panX, panY } = this.get();
+            const { x, y } = this.pan;
 
-            this.setPan(panX + dx, panY + dy);
+            this.setPan(x + dx, y + dy);
           }
 
           toggleTheme() {
@@ -634,7 +805,7 @@
           #write() {
             clearTimeout(this.#saveTimeout);
             if (!this.#pending) return;
-            const { theme, themeChosen, ...options } = this.get();
+            const { theme, themeChosen, localImage, ...options } = this.get();
             try {
               localStorage.setItem(
                 STORAGE_KEY,
@@ -666,7 +837,17 @@
 
         const store = new OverlayStore();
 
-        // The document follows the store: CSS reads these attributes.
+        // The document follows the store: CSS reads these attributes and
+        // this property.
+        store.select(
+          state => state.cardWidthPx,
+          cardWidthPx => {
+            $root.style.setProperty(
+              "--overlay-card-width-px",
+              cardWidthPx.toString(),
+            );
+          },
+        );
         store.select(
           state => state.theme,
           theme => {
@@ -697,115 +878,134 @@
 
     <div class="overlay-white-screen" aria-hidden="true"></div>
 
-    <div class="overlay-pills">
-      <overlay-field>
-        <label class="app-pill">
-          <span class="sr-only">Image</span>
-          <select name="image">
-            <button>
-              <strong aria-hidden="true">Image</strong>
-              <selectedcontent></selectedcontent>
-            </button>
-          </select>
-        </label>
-      </overlay-field>
-      <overlay-field>
-        <label class="app-pill">
-          <span class="sr-only">Format</span>
-          <select name="paper">
-            <button>
-              <strong aria-hidden="true">Format</strong>
-              <selectedcontent></selectedcontent>
-            </button>
-            <option value="A3">A3</option>
-            <option value="A4">A4</option>
-          </select>
-        </label>
-      </overlay-field>
-      <overlay-field>
-        <label class="app-pill">
-          <span class="sr-only">Orientation</span>
-          <select name="orientation">
-            <button>
-              <strong aria-hidden="true">Orientation</strong>
-              <selectedcontent></selectedcontent>
-            </button>
-            <option value="auto">Auto</option>
-            <option value="landscape">Paysage</option>
-            <option value="portrait">Portrait</option>
-          </select>
-        </label>
-      </overlay-field>
-    </div>
+    <div class="overlay-bar">
+      <div class="overlay-pills">
+        <overlay-field>
+          <label class="app-pill">
+            <span class="sr-only">Image</span>
+            <select name="image">
+              <button>
+                <strong aria-hidden="true">Image</strong>
+                <selectedcontent></selectedcontent>
+              </button>
+            </select>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="app-pill">
+            <span class="sr-only">Format</span>
+            <select name="paper">
+              <button>
+                <strong aria-hidden="true">Format</strong>
+                <selectedcontent></selectedcontent>
+              </button>
+              <option value="A3">A3</option>
+              <option value="A4">A4</option>
+            </select>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="app-pill">
+            <span class="sr-only">Orientation</span>
+            <select name="orientation">
+              <button>
+                <strong aria-hidden="true">Orientation</strong>
+                <selectedcontent></selectedcontent>
+              </button>
+              <option value="auto">Auto</option>
+              <option value="landscape">Paysage</option>
+              <option value="portrait">Portrait</option>
+            </select>
+          </label>
+        </overlay-field>
+      </div>
 
-    <div class="app-toolbar">
-      <button
-        class="app-control"
-        type="button"
-        popovertarget="overlay-settings"
-        aria-label="Réglages"
-        title="Réglages"
-      >
-        ⚙&#xFE0E;
-      </button>
-      <overlay-toggle name="grid">
+      <div class="app-toolbar">
+        <overlay-image-opener>
+          <label class="app-control" title="Ouvrir une image">
+            <input class="sr-only" type="file" accept="image/*" />
+            <span class="sr-only">Ouvrir une image</span>
+            <span aria-hidden="true">⤒&#xFE0E;</span>
+          </label>
+        </overlay-image-opener>
         <button
           class="app-control"
           type="button"
-          aria-label="Grille (G)"
-          title="Grille (G)"
+          popovertarget="overlay-settings"
+          aria-label="Réglages"
+          title="Réglages"
         >
-          #
+          ⚙&#xFE0E;
         </button>
-      </overlay-toggle>
-      <overlay-toggle name="guides">
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Repères au centre (C)"
-          title="Repères au centre (C)"
-        >
-          +
-        </button>
-      </overlay-toggle>
-      <overlay-toggle name="locked">
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Verrouiller la position (L)"
-          title="Verrouiller la position (L)"
-        >
-          ⚿&#xFE0E;
-        </button>
-      </overlay-toggle>
-      <overlay-toggle name="whiteScreen">
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Écran blanc (W)"
-          title="Écran blanc (W)"
-        >
-          □&#xFE0E;
-        </button>
-      </overlay-toggle>
-      <overlay-fullscreen-toggle>
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Plein écran (F)"
-          title="Plein écran (F)"
-        >
-          ⤢&#xFE0E;
-        </button>
-      </overlay-fullscreen-toggle>
-      <overlay-theme-toggle>
-        <button
-          class="app-control"
-          type="button"
-          aria-label="Thème sombre"
-          title="Thème clair/sombre"
-        ></button>
-      </overlay-theme-toggle>
+        <overlay-toggle name="grid">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Grille (G)"
+            title="Grille (G)"
+          >
+            #
+          </button>
+        </overlay-toggle>
+        <overlay-toggle name="guides">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Repères au centre (C)"
+            title="Repères au centre (C)"
+          >
+            +
+          </button>
+        </overlay-toggle>
+        <overlay-toggle name="moveImage">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Déplacer l’image sur la feuille (I)"
+            title="Déplacer l’image sur la feuille (I)"
+          >
+            ✥&#xFE0E;
+          </button>
+        </overlay-toggle>
+        <overlay-toggle name="locked">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Verrouiller la position (L)"
+            title="Verrouiller la position (L)"
+          >
+            ⚿&#xFE0E;
+          </button>
+        </overlay-toggle>
+        <overlay-toggle name="whiteScreen">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Écran blanc (W)"
+            title="Écran blanc (W)"
+          >
+            □&#xFE0E;
+          </button>
+        </overlay-toggle>
+        <overlay-fullscreen-toggle>
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Plein écran (F)"
+            title="Plein écran (F)"
+          >
+            ⤢&#xFE0E;
+          </button>
+        </overlay-fullscreen-toggle>
+        <overlay-theme-toggle>
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Thème sombre"
+            title="Thème clair/sombre"
+          ></button>
+        </overlay-theme-toggle>
+      </div>
     </div>
 
     <div
@@ -815,6 +1015,32 @@
     >
       <h2 class="overlay-panel__title app-meta">Réglages</h2>
       <div class="overlay-settings__fields">
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Zoom</span>
+            <input type="range" name="imageScale" min="25" max="400" step="1" />
+            <span><output></output> %</span>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Rotation</span>
+            <input
+              type="range"
+              name="imageRotation"
+              min="-180"
+              max="180"
+              step="1"
+            />
+            <span><output></output>°</span>
+          </label>
+        </overlay-field>
+        <overlay-field>
+          <label class="overlay-settings__field">
+            <span>Miroir</span>
+            <input type="checkbox" name="mirrored" />
+          </label>
+        </overlay-field>
         <overlay-field>
           <label class="overlay-settings__field">
             <span>Contraste</span>
@@ -867,25 +1093,78 @@
             <input type="color" name="guidesColor" />
           </label>
         </overlay-field>
+      </div>
+      <div class="overlay-settings__actions">
+        <button
+          class="app-pill"
+          type="button"
+          command="show-modal"
+          commandfor="overlay-calibration"
+        >
+          Calibrer…
+        </button>
+        <overlay-reset>
+          <button class="app-pill" type="button">Réinitialiser (R)</button>
+        </overlay-reset>
+      </div>
+    </div>
+
+    <dialog
+      class="overlay-panel overlay-calibration"
+      id="overlay-calibration"
+      aria-labelledby="overlay-calibration-title"
+    >
+      <h2 class="overlay-panel__title app-meta" id="overlay-calibration-title">
+        Calibrer
+      </h2>
+      <p class="overlay-calibration__help">
+        Posez une carte bancaire sur le rectangle, puis ajustez-le jusqu’à ce
+        qu’il ait la taille de la carte : la feuille sera à l’échelle.
+      </p>
+      <div class="overlay-calibration__card" aria-hidden="true"></div>
+      <div class="overlay-calibration__width">
+        <overlay-step name="cardWidthPx" by="-1">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Rétrécir"
+            title="Rétrécir"
+          >
+            −
+          </button>
+        </overlay-step>
         <overlay-field>
-          <label class="overlay-settings__field">
-            <span>Largeur de l’écran</span>
+          <label>
+            <span class="sr-only">Largeur de la carte</span>
             <input
-              class="app-field"
-              type="number"
-              name="screenWidthMm"
-              min="50"
-              max="3000"
+              type="range"
+              name="cardWidthPx"
+              min="150"
+              max="800"
               step="1"
             />
-            <span>mm</span>
           </label>
         </overlay-field>
+        <overlay-step name="cardWidthPx" by="1">
+          <button
+            class="app-control"
+            type="button"
+            aria-label="Agrandir"
+            title="Agrandir"
+          >
+            +
+          </button>
+        </overlay-step>
       </div>
-      <overlay-reset>
-        <button class="app-pill" type="button">Réinitialiser (R)</button>
-      </overlay-reset>
-    </div>
+      <button
+        class="app-pill"
+        type="button"
+        command="close"
+        commandfor="overlay-calibration"
+      >
+        OK
+      </button>
+    </dialog>
 
     <overlay-shortcuts>
       <button
@@ -916,7 +1195,21 @@
               <td class="overlay-shortcuts__keys">
                 <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd>
               </td>
-              <td>Déplacer l’image</td>
+              <td>Déplacer la feuille, ou l’image</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>I</kbd></td>
+              <td>Déplacer l’image sur la feuille</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys">
+                <kbd>+</kbd> <kbd>−</kbd>
+              </td>
+              <td>Zoom</td>
+            </tr>
+            <tr>
+              <td class="overlay-shortcuts__keys"><kbd>M</kbd></td>
+              <td>Miroir</td>
             </tr>
             <tr>
               <td class="overlay-shortcuts__keys"><kbd>G</kbd></td>
@@ -957,6 +1250,7 @@
       const { store } = window;
 
       const PAN_STEP_PX = 10;
+      const ZOOM_STEP = 5;
       const SHORTCUTS_HIDE_DELAY_MS = 150;
 
       const isMac = /mac|iphone|ipad/i.test(
@@ -992,10 +1286,10 @@
             "pointerdown",
             event => {
               if (event.button !== 0) return;
-              const { panX, panY } = store.get();
+              const { x, y } = store.pan;
               this.#origin = {
-                x: event.clientX - panX,
-                y: event.clientY - panY,
+                x: event.clientX - x,
+                y: event.clientY - y,
               };
               this.setPointerCapture(event.pointerId);
               this.#internals.states.add("dragging");
@@ -1066,23 +1360,42 @@
           this.#controller = new AbortController();
           const { signal } = this.#controller;
 
+          // A file of the list is in the images directory; the URL of an
+          // image opened from the device stays as it is.
+          const imagesUrl = new URL(store.imagesDir, document.baseURI);
+
           const renders = {
             image: file => {
               const image = store.images.find(item => item.file === file);
-              $image.src = store.imagesDir + file;
+              $image.src = new URL(file, imagesUrl).href;
               $image.alt = image.name;
+            },
+            imagePanX: imagePanX => {
+              this.style.setProperty("--overlay-image-pan-x", `${imagePanX}px`);
+            },
+            imagePanY: imagePanY => {
+              this.style.setProperty("--overlay-image-pan-y", `${imagePanY}px`);
+            },
+            imageScale: imageScale => {
+              this.style.setProperty(
+                "--overlay-image-scale",
+                imageScale.toString(),
+              );
+            },
+            imageRotation: imageRotation => {
+              this.style.setProperty(
+                "--overlay-image-rotation",
+                imageRotation.toString(),
+              );
+            },
+            mirrored: mirrored => {
+              this.toggleAttribute("data-mirrored", mirrored);
             },
             paper: paper => {
               this.dataset.paper = paper;
             },
             orientation: orientation => {
               this.dataset.orientation = orientation;
-            },
-            screenWidthMm: screenWidthMm => {
-              this.style.setProperty(
-                "--overlay-screen-width",
-                screenWidthMm.toString(),
-              );
             },
             contrast: contrast => {
               this.style.setProperty("--overlay-contrast", contrast.toString());
@@ -1160,6 +1473,15 @@
             "abort",
             store.select(state => state[name], render),
           );
+          signal.addEventListener(
+            "abort",
+            store.select(
+              state => store.isHeld(name, state),
+              held => {
+                $control.disabled = held;
+              },
+            ),
+          );
         }
 
         disconnectedCallback() {
@@ -1168,12 +1490,45 @@
       }
 
       // The images are options of the select before the field shows the
-      // current one.
+      // current one, an image opened from the device among them. The
+      // button that shows the one chosen comes with the HTML.
       const $imageSelect = document.querySelector('select[name="image"]');
-      for (const { name, file } of store.images) {
-        $imageSelect.append(new Option(name, file));
-      }
+      store.select(
+        state => state.localImage,
+        () => {
+          $imageSelect.options.length = 0;
+          $imageSelect.append(
+            ...store.images.map(({ name, file }) => new Option(name, file)),
+          );
+        },
+      );
       customElements.define("overlay-field", OverlayFieldElement);
+
+      /** Opens an image of the device: the input its label holds asks for it. */
+      class OverlayImageOpenerElement extends HTMLElement {
+        #controller = null;
+
+        connectedCallback() {
+          const $input = this.querySelector('input[type="file"]');
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+          $input.addEventListener(
+            "change",
+            () => {
+              const [file] = $input.files;
+              if (file) store.openImage(file);
+              // The same file, opened again, changes the input again.
+              $input.value = "";
+            },
+            { signal },
+          );
+        }
+
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define("overlay-image-opener", OverlayImageOpenerElement);
 
       /** A button that switches on and off the option of the store its name gives. */
       class OverlayToggleElement extends HTMLElement {
@@ -1203,6 +1558,36 @@
         }
       }
       customElements.define("overlay-toggle", OverlayToggleElement);
+
+      /** A button that steps the option of the store its name gives, by the number of its by attribute. */
+      class OverlayStepElement extends HTMLElement {
+        #controller = null;
+
+        connectedCallback() {
+          const $button = this.querySelector("button");
+          const name = this.getAttribute("name");
+          const by = Number(this.getAttribute("by"));
+          this.#controller = new AbortController();
+          const { signal } = this.#controller;
+          $button.addEventListener("click", () => store.step(name, by), {
+            signal,
+          });
+          signal.addEventListener(
+            "abort",
+            store.select(
+              state => store.isHeld(name, state),
+              held => {
+                $button.disabled = held;
+              },
+            ),
+          );
+        }
+
+        disconnectedCallback() {
+          this.#controller?.abort();
+        }
+      }
+      customElements.define("overlay-step", OverlayStepElement);
 
       /** The fullscreen is the document's: the button follows it. */
       class OverlayFullscreenToggleElement extends HTMLElement {
@@ -1286,6 +1671,10 @@
         arrowright: () => store.movePan(PAN_STEP_PX, 0),
         arrowup: () => store.movePan(0, -PAN_STEP_PX),
         arrowdown: () => store.movePan(0, PAN_STEP_PX),
+        "+": () => store.step("imageScale", ZOOM_STEP),
+        "-": () => store.step("imageScale", -ZOOM_STEP),
+        i: () => store.toggle("moveImage"),
+        m: () => store.toggle("mirrored"),
         g: () => store.toggle("grid"),
         c: () => store.toggle("guides"),
         l: () => store.toggle("locked"),
