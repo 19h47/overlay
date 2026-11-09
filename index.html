@@ -524,6 +524,7 @@
 
         const $root = document.documentElement;
         const $themeColor = document.querySelector('meta[name="theme-color"]');
+        const $favicon = document.querySelector('link[rel="icon"]');
         const darkQuery = matchMedia("(prefers-color-scheme: dark)");
 
         const config = JSON.parse(
@@ -852,6 +853,8 @@
           theme => {
             $root.dataset.theme = theme;
             $themeColor.content = getComputedStyle($root).backgroundColor;
+            $favicon.href =
+              theme === "dark" ? "favicon-dark.svg" : "favicon.svg";
           },
         );
         store.select(
