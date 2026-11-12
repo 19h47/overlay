@@ -15,460 +15,462 @@
     <style>
       /* What Overlay adds to app-style.css, the base shared by the small apps */
 
-      :root {
-        --overlay-u4: calc(var(--app-phi) * var(--app-u3));
-        /* Three steps above --overlay-u4 */
-        --overlay-panel-width: calc(
-          var(--overlay-u4) * var(--app-phi) * var(--app-phi) * var(--app-phi)
-        );
+      @layer app {
+        :root {
+          --overlay-u4: calc(var(--app-phi) * var(--app-u3));
+          /* Three steps above --overlay-u4 */
+          --overlay-panel-width: calc(
+            var(--overlay-u4) * var(--app-phi) * var(--app-phi) * var(--app-phi)
+          );
 
-        /*
-         * A millimetre on the screen: the width of a bank card laid on it, as calibrated, divided by the width of the
-         * card (ISO/IEC 7810 ID-1). CSS pixels keep their size when the screen turns or the window changes.
-         */
-        --overlay-card-width-mm: 85.6;
-        --overlay-card-height-mm: 53.98;
-        --overlay-card-radius-mm: 3.18;
-        --overlay-mm: calc(
-          var(--overlay-card-width-px) * 1px / var(--overlay-card-width-mm)
-        );
+          /*
+           * A millimetre on the screen: the width of a bank card laid on it, as calibrated, divided by the width of the
+           * card (ISO/IEC 7810 ID-1). CSS pixels keep their size when the screen turns or the window changes.
+           */
+          --overlay-card-width-mm: 85.6;
+          --overlay-card-height-mm: 53.98;
+          --overlay-card-radius-mm: 3.18;
+          --overlay-mm: calc(
+            var(--overlay-card-width-px) * 1px / var(--overlay-card-width-mm)
+          );
 
-        /* The white screen lights the paper, whatever the theme */
-        --overlay-white: rgb(255, 255, 255);
-        --overlay-grid-line-width: 1px;
-        --overlay-guide-line-width: 2px;
+          /* The white screen lights the paper, whatever the theme */
+          --overlay-white: rgb(255, 255, 255);
+          --overlay-grid-line-width: 1px;
+          --overlay-guide-line-width: 2px;
 
-        --overlay-transition-2: calc(
-          var(--app-transition-1) * var(--app-phi)
-        );
-      }
+          --overlay-transition-2: calc(
+            var(--app-transition-1) * var(--app-phi)
+          );
+        }
 
-      html {
-        overflow: hidden;
-      }
+        html {
+          overflow: hidden;
+        }
 
-      /* Viewport: the whole screen, the sheet dragged in it */
+        /* Viewport: the whole screen, the sheet dragged in it */
 
-      overlay-viewport {
-        position: fixed;
-        inset: 0;
-        overflow: hidden;
-        cursor: grab;
-        touch-action: none;
-        user-select: none;
-      }
+        overlay-viewport {
+          position: fixed;
+          inset: 0;
+          overflow: hidden;
+          cursor: grab;
+          touch-action: none;
+          user-select: none;
+        }
 
-      overlay-viewport:state(dragging) {
-        cursor: grabbing;
-      }
+        overlay-viewport:state(dragging) {
+          cursor: grabbing;
+        }
 
-      /* Locked, the sheet and the image stay where they are */
-      overlay-viewport:state(locked) {
-        cursor: default;
-      }
+        /* Locked, the sheet and the image stay where they are */
+        overlay-viewport:state(locked) {
+          cursor: default;
+        }
 
-      /* The sheet, at the size of the paper laid on the screen. Its long side across, unless it stands in portrait. */
-      overlay-sheet {
-        --overlay-sheet-width: var(--overlay-paper-long);
-        --overlay-sheet-height: var(--overlay-paper-short);
+        /* The sheet, at the size of the paper laid on the screen. Its long side across, unless it stands in portrait. */
+        overlay-sheet {
+          --overlay-sheet-width: var(--overlay-paper-long);
+          --overlay-sheet-height: var(--overlay-paper-short);
 
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: calc(var(--overlay-sheet-width) * var(--overlay-mm));
-        height: calc(var(--overlay-sheet-height) * var(--overlay-mm));
-        translate: calc(var(--overlay-pan-x, 0px) - 50%)
-          calc(var(--overlay-pan-y, 0px) - 50%);
-        /* The image, moved, zoomed or turned, ends at the edge of the paper */
-        overflow: clip;
-      }
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: calc(var(--overlay-sheet-width) * var(--overlay-mm));
+          height: calc(var(--overlay-sheet-height) * var(--overlay-mm));
+          translate: calc(var(--overlay-pan-x, 0px) - 50%)
+            calc(var(--overlay-pan-y, 0px) - 50%);
+          /* The image, moved, zoomed or turned, ends at the edge of the paper */
+          overflow: clip;
+        }
 
-      overlay-sheet[data-paper="A3"] {
-        --overlay-paper-short: 297;
-        --overlay-paper-long: 420;
-      }
+        overlay-sheet[data-paper="A3"] {
+          --overlay-paper-short: 297;
+          --overlay-paper-long: 420;
+        }
 
-      overlay-sheet[data-paper="A4"] {
-        --overlay-paper-short: 210;
-        --overlay-paper-long: 297;
-      }
+        overlay-sheet[data-paper="A4"] {
+          --overlay-paper-short: 210;
+          --overlay-paper-long: 297;
+        }
 
-      overlay-sheet[data-orientation="portrait"] {
-        --overlay-sheet-width: var(--overlay-paper-short);
-        --overlay-sheet-height: var(--overlay-paper-long);
-      }
-
-      @media (orientation: portrait) {
-        overlay-sheet[data-orientation="auto"] {
+        overlay-sheet[data-orientation="portrait"] {
           --overlay-sheet-width: var(--overlay-paper-short);
           --overlay-sheet-height: var(--overlay-paper-long);
         }
-      }
 
-      overlay-sheet img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        /* Moved on the sheet, then turned, zoomed and flipped around its center */
-        translate: var(--overlay-image-pan-x, 0px)
-          var(--overlay-image-pan-y, 0px);
-        rotate: calc(var(--overlay-image-rotation, 0) * 1deg);
-        scale: calc(
-            var(--overlay-image-flip, 1) * var(--overlay-image-scale, 100) / 100
-          )
-          calc(var(--overlay-image-scale, 100) / 100);
-        filter: grayscale(var(--overlay-grayscale, 0))
-          contrast(calc(var(--overlay-contrast) * 1%))
-          brightness(calc(var(--overlay-brightness) * 1%));
-      }
+        @media (orientation: portrait) {
+          overlay-sheet[data-orientation="auto"] {
+            --overlay-sheet-width: var(--overlay-paper-short);
+            --overlay-sheet-height: var(--overlay-paper-long);
+          }
+        }
 
-      overlay-sheet[data-grayscale] img {
-        --overlay-grayscale: 1;
-      }
+        overlay-sheet img {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          /* Moved on the sheet, then turned, zoomed and flipped around its center */
+          translate: var(--overlay-image-pan-x, 0px)
+            var(--overlay-image-pan-y, 0px);
+          rotate: calc(var(--overlay-image-rotation, 0) * 1deg);
+          scale: calc(
+              var(--overlay-image-flip, 1) * var(--overlay-image-scale, 100) / 100
+            )
+            calc(var(--overlay-image-scale, 100) / 100);
+          filter: grayscale(var(--overlay-grayscale, 0))
+            contrast(calc(var(--overlay-contrast) * 1%))
+            brightness(calc(var(--overlay-brightness) * 1%));
+        }
 
-      /* In a mirror, left to right */
-      overlay-sheet[data-mirrored] img {
-        --overlay-image-flip: -1;
-      }
+        overlay-sheet[data-grayscale] img {
+          --overlay-grayscale: 1;
+        }
 
-      .overlay-sheet__grid,
-      .overlay-sheet__guides {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-      }
+        /* In a mirror, left to right */
+        overlay-sheet[data-mirrored] img {
+          --overlay-image-flip: -1;
+        }
 
-      /* Squares of the step, in centimetres, centered on the sheet */
-      .overlay-sheet__grid {
-        --overlay-grid-line: color-mix(
-          in srgb,
-          var(--overlay-grid-color) 25%,
-          transparent
-        );
-        --overlay-grid-step: calc(var(--overlay-grid-cm) * 10 * var(--overlay-mm));
+        .overlay-sheet__grid,
+        .overlay-sheet__guides {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+        }
 
-        background-image:
-          linear-gradient(
-            to right,
-            var(--overlay-grid-line) var(--overlay-grid-line-width),
-            transparent 0
-          ),
-          linear-gradient(
-            to bottom,
-            var(--overlay-grid-line) var(--overlay-grid-line-width),
-            transparent 0
+        /* Squares of the step, in centimetres, centered on the sheet */
+        .overlay-sheet__grid {
+          --overlay-grid-line: color-mix(
+            in srgb,
+            var(--overlay-grid-color) 25%,
+            transparent
           );
-        background-size:
-          var(--overlay-grid-step) 100%,
-          100% var(--overlay-grid-step);
-        background-position:
-          center 0,
-          0 center;
-      }
+          --overlay-grid-step: calc(var(--overlay-grid-cm) * 10 * var(--overlay-mm));
 
-      /* A line across the middle of the sheet, a line down it, and its edge to lay the paper on */
-      .overlay-sheet__guides {
-        --overlay-guide-line: color-mix(
-          in srgb,
-          var(--overlay-guides-color) 50%,
-          transparent
-        );
+          background-image:
+            linear-gradient(
+              to right,
+              var(--overlay-grid-line) var(--overlay-grid-line-width),
+              transparent 0
+            ),
+            linear-gradient(
+              to bottom,
+              var(--overlay-grid-line) var(--overlay-grid-line-width),
+              transparent 0
+            );
+          background-size:
+            var(--overlay-grid-step) 100%,
+            100% var(--overlay-grid-step);
+          background-position:
+            center 0,
+            0 center;
+        }
 
-        box-shadow: inset 0 0 0 var(--overlay-guide-line-width)
-          var(--overlay-guide-line);
-        background:
-          linear-gradient(var(--overlay-guide-line), var(--overlay-guide-line))
-            center / var(--overlay-guide-line-width) 100% no-repeat,
-          linear-gradient(var(--overlay-guide-line), var(--overlay-guide-line))
-            center / 100% var(--overlay-guide-line-width) no-repeat;
-      }
+        /* A line across the middle of the sheet, a line down it, and its edge to lay the paper on */
+        .overlay-sheet__guides {
+          --overlay-guide-line: color-mix(
+            in srgb,
+            var(--overlay-guides-color) 50%,
+            transparent
+          );
 
-      /* Over the sheet, under the pills and the toolbar */
-      .overlay-white-screen {
-        position: fixed;
-        inset: 0;
-        background: var(--overlay-white);
-        pointer-events: none;
-        opacity: 0;
-        visibility: hidden;
-        transition:
-          opacity var(--overlay-transition-2),
-          visibility var(--overlay-transition-2);
-      }
+          box-shadow: inset 0 0 0 var(--overlay-guide-line-width)
+            var(--overlay-guide-line);
+          background:
+            linear-gradient(var(--overlay-guide-line), var(--overlay-guide-line))
+              center / var(--overlay-guide-line-width) 100% no-repeat,
+            linear-gradient(var(--overlay-guide-line), var(--overlay-guide-line))
+              center / 100% var(--overlay-guide-line-width) no-repeat;
+        }
 
-      :root[data-white-screen] .overlay-white-screen {
-        opacity: 1;
-        visibility: visible;
-      }
+        /* Over the sheet, under the pills and the toolbar */
+        .overlay-white-screen {
+          position: fixed;
+          inset: 0;
+          background: var(--overlay-white);
+          pointer-events: none;
+          opacity: 0;
+          visibility: hidden;
+          transition:
+            opacity var(--overlay-transition-2),
+            visibility var(--overlay-transition-2);
+        }
 
-      /* The label of a file input is its control: it shows the focus of the input */
-      .app-control:has(:focus-visible) {
-        border-color: var(--app-line);
-        color: var(--app-text);
-        outline: var(--app-focus-outline);
-        outline-offset: var(--app-focus-outline-offset);
-      }
+        :root[data-white-screen] .overlay-white-screen {
+          opacity: 1;
+          visibility: visible;
+        }
 
-      /* A field brick lays out nothing: the label it holds does */
-      overlay-field {
-        display: contents;
-      }
+        /* The label of a file input is its control: it shows the focus of the input */
+        .app-control:has(:focus-visible) {
+          border-color: var(--app-line);
+          color: var(--app-text);
+          outline: var(--app-focus-outline);
+          outline-offset: var(--app-focus-outline-offset);
+        }
 
-      /*
-       * The pills top-left, the toolbar top-right, floating over the sheet; where the screen has no room for both on
-       * a line, the toolbar goes under the pills
-       */
-      .overlay-bar {
-        position: fixed;
-        inset: var(--app-u2) var(--app-u2) auto;
-        z-index: 1;
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--app-control-gap);
-        /* Between the pills and the toolbar, the sheet is still dragged */
-        pointer-events: none;
-      }
+        /* A field brick lays out nothing: the label it holds does */
+        overlay-field {
+          display: contents;
+        }
 
-      .overlay-bar > * {
-        pointer-events: auto;
-      }
+        /*
+         * The pills top-left, the toolbar top-right, floating over the sheet; where the screen has no room for both on
+         * a line, the toolbar goes under the pills
+         */
+        .overlay-bar {
+          position: fixed;
+          inset: var(--app-u2) var(--app-u2) auto;
+          z-index: 1;
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--app-control-gap);
+          /* Between the pills and the toolbar, the sheet is still dragged */
+          pointer-events: none;
+        }
 
-      .overlay-bar .app-toolbar {
-        position: static;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        margin-left: auto;
-      }
+        .overlay-bar > * {
+          pointer-events: auto;
+        }
 
-      .overlay-pills {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--app-control-gap);
-      }
+        .overlay-bar .app-toolbar {
+          position: static;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          margin-left: auto;
+        }
 
-      .overlay-pills .app-pill {
-        background: var(--app-bg);
-      }
+        .overlay-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--app-control-gap);
+        }
 
-      /* A panel: the settings under the toolbar, the shortcuts in the bottom-right corner */
-      .overlay-panel {
-        /* Reset the UA popover centering: each panel sets its corner */
-        margin: 0;
-        padding: var(--app-u2);
-        max-width: calc(100vw - 2 * var(--app-u2));
-        border: 1px solid var(--app-line-soft);
-        border-radius: var(--app-radius);
-        background: var(--app-bg);
-        color: var(--app-text);
-        font-family: var(--app-font-ui);
-        font-size: var(--app-font-small);
-        opacity: 0;
-        translate: 0 var(--overlay-panel-from);
-        transition:
-          opacity var(--app-transition-1),
-          translate var(--app-transition-1),
-          display var(--app-transition-1) allow-discrete,
-          overlay var(--app-transition-1) allow-discrete;
-      }
+        .overlay-pills .app-pill {
+          background: var(--app-bg);
+        }
 
-      .overlay-panel:is(:popover-open, [open]) {
-        opacity: 1;
-        translate: 0 0;
-
-        @starting-style {
+        /* A panel: the settings under the toolbar, the shortcuts in the bottom-right corner */
+        .overlay-panel {
+          /* Reset the UA popover centering: each panel sets its corner */
+          margin: 0;
+          padding: var(--app-u2);
+          max-width: calc(100vw - 2 * var(--app-u2));
+          border: 1px solid var(--app-line-soft);
+          border-radius: var(--app-radius);
+          background: var(--app-bg);
+          color: var(--app-text);
+          font-family: var(--app-font-ui);
+          font-size: var(--app-text-s);
           opacity: 0;
           translate: 0 var(--overlay-panel-from);
+          transition:
+            opacity var(--app-transition-1),
+            translate var(--app-transition-1),
+            display var(--app-transition-1) allow-discrete,
+            overlay var(--app-transition-1) allow-discrete;
         }
-      }
 
-      .overlay-panel__title {
-        margin-bottom: var(--app-u1);
-      }
+        .overlay-panel:is(:popover-open, [open]) {
+          opacity: 1;
+          translate: 0 0;
 
-      [popovertarget="overlay-settings"] {
-        anchor-name: --overlay-settings;
-      }
+          @starting-style {
+            opacity: 0;
+            translate: 0 var(--overlay-panel-from);
+          }
+        }
 
-      /*
-       * The settings float from their button, a gap away, under it and along its right edge; where the screen has no
-       * room, above it or along its left edge. Within the screen, they scroll.
-       */
-      .overlay-settings {
-        --overlay-panel-from: calc(-1 * var(--app-u0));
+        .overlay-panel__title {
+          margin-bottom: var(--app-u1);
+        }
 
-        position-anchor: --overlay-settings;
-        inset: auto;
-        position-area: block-end span-inline-start;
-        position-try-fallbacks:
-          flip-block,
-          flip-inline,
-          flip-block flip-inline;
-        margin-block: var(--app-gap);
-        /* Without stretch (Firefox), the room under the toolbar */
-        max-block-size: calc(
-          100dvh - var(--app-u2) - var(--app-control-size) - 2 * var(--app-gap)
-        );
-        max-block-size: stretch;
-        overflow: auto;
-      }
+        [popovertarget="overlay-settings"] {
+          anchor-name: --overlay-settings;
+        }
 
-      /* A field a line: its name, its control, wide enough for a number of four digits, its value */
-      .overlay-settings__fields {
-        display: grid;
-        grid-template-columns: auto calc(var(--overlay-u4) * var(--app-phi)) auto;
-        gap: var(--app-u1) var(--app-u0);
-        align-items: center;
-        margin-bottom: var(--app-u2);
-      }
+        /*
+         * The settings float from their button, a gap away, under it and along its right edge; where the screen has no
+         * room, above it or along its left edge. Within the screen, they scroll.
+         */
+        .overlay-settings {
+          --overlay-panel-from: calc(-1 * var(--app-u0));
 
-      .overlay-settings__field {
-        grid-column: 1 / -1;
-        display: grid;
-        grid-template-columns: subgrid;
-        align-items: center;
-      }
+          position-anchor: --overlay-settings;
+          inset: auto;
+          position-area: block-end span-inline-start;
+          position-try-fallbacks:
+            flip-block,
+            flip-inline,
+            flip-block flip-inline;
+          margin-block: var(--app-gap);
+          /* Without stretch (Firefox), the room under the toolbar */
+          max-block-size: calc(
+            100dvh - var(--app-u2) - var(--app-control-size) - 2 * var(--app-gap)
+          );
+          max-block-size: stretch;
+          overflow: auto;
+        }
 
-      .overlay-settings__field input {
-        accent-color: var(--app-text);
-        font: inherit;
-        color: inherit;
-      }
+        /* A field a line: its name, its control, wide enough for a number of four digits, its value */
+        .overlay-settings__fields {
+          display: grid;
+          grid-template-columns: auto calc(var(--overlay-u4) * var(--app-phi)) auto;
+          gap: var(--app-u1) var(--app-u0);
+          align-items: center;
+          margin-bottom: var(--app-u2);
+        }
 
-      .overlay-settings__field :is([type="checkbox"], [type="color"]) {
-        justify-self: start;
-      }
+        .overlay-settings__field {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: subgrid;
+          align-items: center;
+        }
 
-      .overlay-settings__field [type="range"] {
-        width: 100%;
-      }
+        .overlay-settings__field input {
+          accent-color: var(--app-text);
+          font: inherit;
+          color: inherit;
+        }
 
-      .overlay-settings__field .app-field {
-        width: 100%;
-        font-variant-numeric: tabular-nums;
-      }
+        .overlay-settings__field :is([type="checkbox"], [type="color"]) {
+          justify-self: start;
+        }
 
-      /* The square of a control, with the line of a field */
-      .overlay-settings__field [type="color"] {
-        width: var(--app-control-size);
-        height: var(--app-control-size);
-        padding: 0;
-        border: 1px solid var(--app-line-soft);
-        border-radius: var(--app-radius);
-        background: transparent;
-      }
+        .overlay-settings__field [type="range"] {
+          width: 100%;
+        }
 
-      .overlay-settings__field output {
-        font-variant-numeric: tabular-nums;
-        text-align: end;
-      }
+        .overlay-settings__field .app-field {
+          width: 100%;
+          font-variant-numeric: tabular-nums;
+        }
 
-      .overlay-settings__actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--app-control-gap);
-      }
+        /* The square of a control, with the line of a field */
+        .overlay-settings__field [type="color"] {
+          width: var(--app-control-size);
+          height: var(--app-control-size);
+          padding: 0;
+          border: 1px solid var(--app-line-soft);
+          border-radius: var(--app-radius);
+          background: transparent;
+        }
 
-      /* Centered on the screen, as a modal dialog is */
-      .overlay-calibration {
-        --overlay-panel-from: var(--app-u0);
+        .overlay-settings__field output {
+          font-variant-numeric: tabular-nums;
+          text-align: end;
+        }
 
-        margin: auto;
-        max-height: calc(100dvh - 2 * var(--app-u2));
-        overflow: auto;
-      }
+        .overlay-settings__actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--app-control-gap);
+        }
 
-      .overlay-calibration__help {
-        max-width: var(--overlay-panel-width);
-        margin-bottom: var(--app-u2);
-      }
+        /* Centered on the screen, as a modal dialog is */
+        .overlay-calibration {
+          --overlay-panel-from: var(--app-u0);
 
-      /* A bank card at the size the screen gives it: laid on it, a real one covers it exactly once calibrated */
-      .overlay-calibration__card {
-        width: calc(var(--overlay-card-width-mm) * var(--overlay-mm));
-        aspect-ratio: var(--overlay-card-width-mm) /
-          var(--overlay-card-height-mm);
-        margin-bottom: var(--app-u2);
-        border: 1px solid var(--app-text);
-        border-radius: calc(var(--overlay-card-radius-mm) * var(--overlay-mm));
-        background: var(--app-fill);
-      }
+          margin: auto;
+          max-height: calc(100dvh - 2 * var(--app-u2));
+          overflow: auto;
+        }
 
-      .overlay-calibration__width {
-        display: flex;
-        gap: var(--app-control-gap);
-        align-items: center;
-        margin-bottom: var(--app-u2);
-      }
+        .overlay-calibration__help {
+          max-width: var(--overlay-panel-width);
+          margin-bottom: var(--app-u2);
+        }
 
-      .overlay-calibration__width label {
-        flex: 1;
-        display: flex;
-      }
+        /* A bank card at the size the screen gives it: laid on it, a real one covers it exactly once calibrated */
+        .overlay-calibration__card {
+          width: calc(var(--overlay-card-width-mm) * var(--overlay-mm));
+          aspect-ratio: var(--overlay-card-width-mm) /
+            var(--overlay-card-height-mm);
+          margin-bottom: var(--app-u2);
+          border: 1px solid var(--app-text);
+          border-radius: calc(var(--overlay-card-radius-mm) * var(--overlay-mm));
+          background: var(--app-fill);
+        }
 
-      .overlay-calibration__width input {
-        flex: 1;
-        accent-color: var(--app-text);
-      }
+        .overlay-calibration__width {
+          display: flex;
+          gap: var(--app-control-gap);
+          align-items: center;
+          margin-bottom: var(--app-u2);
+        }
 
-      overlay-shortcuts {
-        position: fixed;
-        right: 0;
-        bottom: 0;
-        z-index: 1;
-      }
+        .overlay-calibration__width label {
+          flex: 1;
+          display: flex;
+        }
 
-      .overlay-shortcuts__hotzone {
-        display: block;
-        /* The font of the page, not the one of a button */
-        font: inherit;
-        width: var(--app-u3);
-        height: var(--app-u3);
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        appearance: none;
-      }
+        .overlay-calibration__width input {
+          flex: 1;
+          accent-color: var(--app-text);
+        }
 
-      .overlay-shortcuts__panel {
-        --overlay-panel-from: var(--app-u0);
+        overlay-shortcuts {
+          position: fixed;
+          right: 0;
+          bottom: 0;
+          z-index: 1;
+        }
 
-        inset: auto var(--app-u2) var(--app-u2) auto;
-        max-width: min(
-          var(--overlay-panel-width),
-          calc(100vw - 2 * var(--app-u2))
-        );
-        /* Within the screen, it scrolls */
-        max-height: calc(100dvh - 2 * var(--app-u2));
-        overflow: auto;
-      }
+        .overlay-shortcuts__hotzone {
+          display: block;
+          /* The font of the page, not the one of a button */
+          font: inherit;
+          width: var(--app-u3);
+          height: var(--app-u3);
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          appearance: none;
+        }
 
-      .overlay-shortcuts__table {
-        width: 100%;
-        border-collapse: collapse;
-      }
+        .overlay-shortcuts__panel {
+          --overlay-panel-from: var(--app-u0);
 
-      .overlay-shortcuts__table td {
-        padding-top: var(--app-u1);
-        vertical-align: baseline;
-      }
+          inset: auto var(--app-u2) var(--app-u2) auto;
+          max-width: min(
+            var(--overlay-panel-width),
+            calc(100vw - 2 * var(--app-u2))
+          );
+          /* Within the screen, it scrolls */
+          max-height: calc(100dvh - 2 * var(--app-u2));
+          overflow: auto;
+        }
 
-      .overlay-shortcuts__table tr:first-child td {
-        padding-top: 0;
-      }
+        .overlay-shortcuts__table {
+          width: 100%;
+          border-collapse: collapse;
+        }
 
-      .overlay-shortcuts__keys {
-        padding-right: var(--app-u2);
-        white-space: nowrap;
-      }
+        .overlay-shortcuts__table td {
+          padding-top: var(--app-u1);
+          vertical-align: baseline;
+        }
 
-      .overlay-shortcuts__table kbd {
-        font-family: var(--app-font-mono);
-        font-size: var(--app-font-small);
-        padding: calc(1em / var(--app-phi) / var(--app-phi) / var(--app-phi))
-          var(--app-u0);
-        border-radius: var(--app-radius);
-        border: 1px solid var(--app-line);
+        .overlay-shortcuts__table tr:first-child td {
+          padding-top: 0;
+        }
+
+        .overlay-shortcuts__keys {
+          padding-right: var(--app-u2);
+          white-space: nowrap;
+        }
+
+        .overlay-shortcuts__table kbd {
+          font-family: var(--app-font-mono);
+          font-size: var(--app-text-s);
+          padding: calc(1em / var(--app-phi) / var(--app-phi) / var(--app-phi))
+            var(--app-u0);
+          border-radius: var(--app-radius);
+          border: 1px solid var(--app-line);
+        }
       }
     </style>
     <script type="application/json" id="overlay-config">
@@ -1015,7 +1017,7 @@
       id="overlay-settings"
       popover
     >
-      <h2 class="overlay-panel__title app-meta">Réglages</h2>
+      <h2 class="overlay-panel__title app-text-s app-text-muted app-font-ui app-uppercase app-font-normal">Réglages</h2>
       <div class="overlay-settings__fields">
         <overlay-field>
           <label class="overlay-settings__field">
@@ -1116,7 +1118,7 @@
       id="overlay-calibration"
       aria-labelledby="overlay-calibration-title"
     >
-      <h2 class="overlay-panel__title app-meta" id="overlay-calibration-title">
+      <h2 class="overlay-panel__title app-text-s app-text-muted app-font-ui app-uppercase app-font-normal" id="overlay-calibration-title">
         Calibrer
       </h2>
       <p class="overlay-calibration__help">
@@ -1181,7 +1183,7 @@
         id="overlay-shortcuts-panel"
         popover
       >
-        <h2 class="overlay-panel__title app-meta">Raccourcis</h2>
+        <h2 class="overlay-panel__title app-text-s app-text-muted app-font-ui app-uppercase app-font-normal">Raccourcis</h2>
         <table class="overlay-shortcuts__table">
           <caption class="sr-only">
             Liste des raccourcis clavier
