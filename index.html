@@ -222,7 +222,7 @@
          */
         .overlay-bar {
           position: fixed;
-          inset: var(--app-u2) var(--app-u2) auto;
+          inset: var(--app-space-l) var(--app-space-l) auto;
           z-index: 1;
           display: flex;
           flex-wrap: wrap;
@@ -256,8 +256,8 @@
         .overlay-panel {
           /* Reset the UA popover centering: each panel sets its corner */
           margin: 0;
-          padding: var(--app-u2);
-          max-width: calc(100vw - 2 * var(--app-u2));
+          padding: var(--app-space-l);
+          max-width: calc(100vw - 2 * var(--app-space-l));
           border: 1px solid var(--app-line-soft);
           border-radius: var(--app-radius);
           background: var(--app-bg);
@@ -284,7 +284,7 @@
         }
 
         .overlay-panel__title {
-          margin-bottom: var(--app-u1);
+          margin-bottom: var(--app-space-m);
         }
 
         [popovertarget="overlay-settings"] {
@@ -305,10 +305,10 @@
             flip-block,
             flip-inline,
             flip-block flip-inline;
-          margin-block: var(--app-gap);
+          margin-block: var(--app-space-s);
           /* Without stretch (Firefox), the room under the toolbar */
           max-block-size: calc(
-            100dvh - var(--app-u2) - var(--app-control-size) - 2 * var(--app-gap)
+            100dvh - var(--app-space-l) - var(--app-control-size) - 2 * var(--app-space-s)
           );
           max-block-size: stretch;
           overflow: auto;
@@ -318,9 +318,9 @@
         .overlay-settings__fields {
           display: grid;
           grid-template-columns: auto calc(var(--overlay-u4) * var(--app-phi)) auto;
-          gap: var(--app-u1) var(--app-u0);
+          gap: var(--app-space-m) var(--app-space-s);
           align-items: center;
-          margin-bottom: var(--app-u2);
+          margin-bottom: var(--app-space-l);
         }
 
         .overlay-settings__field {
@@ -375,13 +375,13 @@
           --overlay-panel-from: var(--app-u0);
 
           margin: auto;
-          max-height: calc(100dvh - 2 * var(--app-u2));
+          max-height: calc(100dvh - 2 * var(--app-space-l));
           overflow: auto;
         }
 
         .overlay-calibration__help {
           max-width: var(--overlay-panel-width);
-          margin-bottom: var(--app-u2);
+          margin-bottom: var(--app-space-l);
         }
 
         /* A bank card at the size the screen gives it: laid on it, a real one covers it exactly once calibrated */
@@ -389,7 +389,7 @@
           width: calc(var(--overlay-card-width-mm) * var(--overlay-mm));
           aspect-ratio: var(--overlay-card-width-mm) /
             var(--overlay-card-height-mm);
-          margin-bottom: var(--app-u2);
+          margin-bottom: var(--app-space-l);
           border: 1px solid var(--app-text);
           border-radius: calc(var(--overlay-card-radius-mm) * var(--overlay-mm));
           background: var(--app-fill);
@@ -399,7 +399,7 @@
           display: flex;
           gap: var(--app-control-gap);
           align-items: center;
-          margin-bottom: var(--app-u2);
+          margin-bottom: var(--app-space-l);
         }
 
         .overlay-calibration__width label {
@@ -434,13 +434,13 @@
         .overlay-shortcuts__panel {
           --overlay-panel-from: var(--app-u0);
 
-          inset: auto var(--app-u2) var(--app-u2) auto;
+          inset: auto var(--app-space-l) var(--app-space-l) auto;
           max-width: min(
             var(--overlay-panel-width),
-            calc(100vw - 2 * var(--app-u2))
+            calc(100vw - 2 * var(--app-space-l))
           );
           /* Within the screen, it scrolls */
-          max-height: calc(100dvh - 2 * var(--app-u2));
+          max-height: calc(100dvh - 2 * var(--app-space-l));
           overflow: auto;
         }
 
@@ -450,7 +450,7 @@
         }
 
         .overlay-shortcuts__table td {
-          padding-top: var(--app-u1);
+          padding-top: var(--app-space-m);
           vertical-align: baseline;
         }
 
@@ -459,7 +459,7 @@
         }
 
         .overlay-shortcuts__keys {
-          padding-right: var(--app-u2);
+          padding-right: var(--app-space-l);
           white-space: nowrap;
         }
 
@@ -467,7 +467,7 @@
           font-family: var(--app-font-mono);
           font-size: var(--app-text-s);
           padding: calc(1em / var(--app-phi) / var(--app-phi) / var(--app-phi))
-            var(--app-u0);
+            var(--app-space-s);
           border-radius: var(--app-radius);
           border: 1px solid var(--app-line);
         }
